@@ -1,0 +1,76 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag version (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "TAG=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "TAG=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare signing keystore and build APK
+        id: build
+        run: |
+          if [[ -n "${{ secrets.KEYSTORE_BASE64 }}" && -n "${{ secrets.STORE_PASSWORD }}" && -n "${{ secrets.KEY_PASSWORD }}" ]]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > my-upload-key.jks
+            KEYSTORE_PATH="$(pwd)/my-upload-key.jks" \
+            STORE_PASSWORD="${{ secrets.STORE_PASSWORD }}" \
+            KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}" \
+            gradle :app:assembleRelease
+            APK_SRC="app/build/outputs/apk/release/app-release.apk"
+          else
+            base64 --decode debug.keystore.base64 > debug.keystore
+            gradle :app:assembleDebug
+            APK_SRC="app/build/outputs/apk/debug/app-debug.apk"
+          fi
+
+          mkdir -p release-assets
+          cp "$APK_SRC" "release-assets/VoltCore-${{ steps.tag.outputs.TAG }}.apk"
+          cp "$APK_SRC" "release-assets/VoltCore-latest.apk"
+
+      - name: Run unit & Robolectric tests
+        run: gradle :app:testDebugUnitTest
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.TAG }}
+          name: VoltCore ${{ steps.tag.outputs.TAG }}
+          generate_release_notes: true
+          files: |
+            release-assets/VoltCore-${{ steps.tag.outputs.TAG }}.apk
+            release-assets/VoltCore-latest.apk
