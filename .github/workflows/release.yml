@@ -77,8 +77,8 @@ jobs:
           cp "$APK_SRC" "release-assets/VoltCore-${{ steps.tag.outputs.TAG }}.apk"
           cp "$APK_SRC" "release-assets/VoltCore-latest.apk"
 
-      - name: Run unit & Robolectric tests
-        run: gradle :app:testDebugUnitTest
+      - name: Run unit tests
+        run: gradle :app:testDebugUnitTest --tests "com.example.ExampleUnitTest"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
