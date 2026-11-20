@@ -70,6 +70,8 @@
     <!-- Settings Screen -->
     <string name="settings_title">System Settings</string>
     <string name="section_pack_calibration">PACK CALIBRATION</string>
+    <string name="label_auto_calibration">Auto-Detect from BMS</string>
+    <string name="desc_auto_calibration">Reads Ah, voltage, cells &amp; Wh automatically</string>
     <string name="label_pack_capacity_wh">Pack Capacity (Wh)</string>
     <string name="label_pack_nominal_v">Nominal Voltage (V)</string>
     <string name="section_alerts">HEALTH &amp; CHARGE ALERTS</string>

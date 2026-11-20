@@ -706,8 +706,10 @@ class BleBmsManager(private val context: Context) {
                         ActiveProtocol.DALY -> {
                             val cmds = listOf(
                                 BmsProtocolParser.DALY_SOC_CMD,
-                                BmsProtocolParser.DALY_TEMP_CMD,
                                 BmsProtocolParser.DALY_MOS_CMD,
+                                BmsProtocolParser.DALY_SOC_CMD,
+                                BmsProtocolParser.DALY_TEMP_CMD,
+                                BmsProtocolParser.DALY_SOC_CMD,
                                 BmsProtocolParser.DALY_STATUS_CMD
                             )
                             writeCharacteristicSerialized(gatt, wc, cmds[tick % cmds.size])
@@ -749,8 +751,11 @@ class BleBmsManager(private val context: Context) {
 
         val deviceName = _state.value.connectedDeviceName ?: "Smart BMS"
 
-        // 1. Standard BLE Battery Level (0x2A19)
+        // 1. Standard BLE Battery Level (0x2A19) - only emit when no Smart BMS UART protocol is active
         if (charUuid == BATTERY_LEVEL_CHAR_UUID) {
+            if (activeProtocol != ActiveProtocol.STANDARD_BATTERY_ONLY) {
+                return
+            }
             val soc = (bytes[0].toInt() and 0xFF).coerceIn(0, 100)
             val fallbackFrame = ParsedBmsFrame(
                 socPercent = soc,
@@ -777,58 +782,81 @@ class BleBmsManager(private val context: Context) {
             return
         }
 
-        // 2. Daly 13-byte frame
-        if (bytes.size >= 13 && bytes[0] == 0xA5.toByte()) {
-            BmsProtocolParser.parseDalyFrame(bytes, lastDalyFrame)?.let { parsed ->
-                lastDalyFrame = parsed
-                activeProtocol = ActiveProtocol.DALY
+        // 2. Daly 13-byte frame(s)
+        if (bytes.size >= 13 && bytes[0] == 0xA5.toByte() && bytes[1] != 0x40.toByte()) {
+            var offset = 0
+            var parsedAny = false
+            while (offset + 13 <= bytes.size && bytes[offset] == 0xA5.toByte()) {
+                val slice = bytes.copyOfRange(offset, offset + 13)
+                BmsProtocolParser.parseDalyFrame(slice, lastDalyFrame)?.let { parsed ->
+                    lastDalyFrame = parsed
+                    activeProtocol = ActiveProtocol.DALY
+                    parsedAny = true
+                }
+                offset += 13
+            }
+            if (parsedAny) {
+                val latestDaly = lastDalyFrame
                 _state.update {
                     it.copy(
-                        detectedProtocol = parsed.protocolName,
+                        detectedProtocol = latestDaly?.protocolName ?: "Daly Smart BMS",
                         handshakeStage = "Streaming live telemetry"
                     )
                 }
-                _frames.tryEmit(deviceName to parsed)
+                if (latestDaly != null && latestDaly.voltageVolts > 0f) {
+                    _frames.tryEmit(deviceName to latestDaly)
+                }
                 return
             }
         }
 
-        // 3. Reassemble JBD (starts 0xDD, ends 0x77) or JK (starts 55 AA EB 90)
-        if (bytes[0] == 0xDD.toByte() ||
-            (bytes.size >= 4 &&
-                bytes[0] == 0x55.toByte() &&
-                bytes[1] == 0xAA.toByte() &&
-                bytes[2] == 0xEB.toByte() &&
-                bytes[3] == 0x90.toByte())
-        ) {
+        // 3. Reassemble JBD (starts DD 03/04 00, length-delimited) or JK (starts 55 AA EB 90, 300B)
+        val isJbdStart = bytes.size >= 3 &&
+            bytes[0] == 0xDD.toByte() &&
+            (bytes[1] == 0x03.toByte() || bytes[1] == 0x04.toByte()) &&
+            bytes[2] == 0x00.toByte()
+        val isJkStart = bytes.size >= 4 &&
+            bytes[0] == 0x55.toByte() &&
+            bytes[1] == 0xAA.toByte() &&
+            bytes[2] == 0xEB.toByte() &&
+            bytes[3] == 0x90.toByte()
+
+        if (isJbdStart || isJkStart) {
             rxBuffer.reset()
         }
         rxBuffer.write(bytes)
         val assembled = rxBuffer.toByteArray()
 
-        // Try JBD complete frame
-        if (assembled.isNotEmpty() && assembled[0] == 0xDD.toByte() && assembled.last() == 0x77.toByte()) {
-            rxBuffer.reset()
-            val cells = BmsProtocolParser.parseJbdCellVoltages(assembled)
-            if (cells != null) {
-                cachedCells = cells
+        // Try JBD complete frame using exact payload length check (avoids premature trigger on 0x77 in payload)
+        if (assembled.size >= 4 && assembled[0] == 0xDD.toByte()) {
+            val dataLen = assembled[3].toInt() and 0xFF
+            val expectedLen = dataLen + 7
+            if (expectedLen in 7..256 && assembled.size >= expectedLen) {
+                rxBuffer.reset()
+                if (assembled[expectedLen - 1] == 0x77.toByte()) {
+                    val frameBytes = assembled.copyOfRange(0, expectedLen)
+                    val cells = BmsProtocolParser.parseJbdCellVoltages(frameBytes)
+                    if (cells != null) {
+                        cachedCells = cells
+                        return
+                    }
+                    BmsProtocolParser.parseJbdBasicInfo(frameBytes, cachedCells)?.let { parsed ->
+                        activeProtocol = ActiveProtocol.JBD
+                        _state.update {
+                            it.copy(
+                                detectedProtocol = parsed.protocolName,
+                                handshakeStage = "Streaming live telemetry"
+                            )
+                        }
+                        _frames.tryEmit(deviceName to parsed)
+                    }
+                }
                 return
             }
-            BmsProtocolParser.parseJbdBasicInfo(assembled, cachedCells)?.let { parsed ->
-                activeProtocol = ActiveProtocol.JBD
-                _state.update {
-                    it.copy(
-                        detectedProtocol = parsed.protocolName,
-                        handshakeStage = "Streaming live telemetry"
-                    )
-                }
-                _frames.tryEmit(deviceName to parsed)
-            }
-            return
         }
 
-        // Try JK complete frame (>= 190 bytes)
-        if (assembled.size >= 190 &&
+        // Try JK complete frame (full 300-byte frame with CRC at index 299)
+        if (assembled.size >= 300 &&
             assembled[0] == 0x55.toByte() &&
             assembled[1] == 0xAA.toByte() &&
             assembled[2] == 0xEB.toByte() &&

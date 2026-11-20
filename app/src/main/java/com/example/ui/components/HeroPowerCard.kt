@@ -69,6 +69,9 @@ fun HeroPowerCard(
     formattedEta: String,
     remainingWh: Float,
     packCapacityWh: Float,
+    packNominalVoltage: Float = 12.8f,
+    packNominalAh: Float = 80f,
+    detectedCellCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val isCharging = snapshot.isCharging
@@ -99,6 +102,12 @@ fun HeroPowerCard(
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "socProgress"
     )
+
+    val specSummary = buildString {
+        if (detectedCellCount > 0) append("${detectedCellCount}S · ")
+        val nomAh = if (snapshot.nominalCapacityAh > 0f) snapshot.nominalCapacityAh else packNominalAh
+        append("${nomAh.toInt()}Ah · ${"%.1f".format(packNominalVoltage)}V")
+    }
 
     Surface(
         modifier = modifier
@@ -209,7 +218,16 @@ fun HeroPowerCard(
                         text = snapshot.deviceName.uppercase(),
                         style = MaterialTheme.typography.labelSmall,
                         color = SlateMuted,
-                        letterSpacing = 1.2.sp
+                        letterSpacing = 1.2.sp,
+                        maxLines = 1
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = specSummary,
+                        style = MonoLabelSmall,
+                        color = accentColor,
+                        maxLines = 1,
+                        modifier = Modifier.testTag("hero_pack_specs")
                     )
                 }
             }

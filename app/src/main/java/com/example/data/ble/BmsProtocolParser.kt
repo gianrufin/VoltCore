@@ -1,6 +1,7 @@
 package com.example.data.ble
 
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 data class ParsedBmsFrame(
     val socPercent: Int,
@@ -12,10 +13,18 @@ data class ParsedBmsFrame(
     val stateOfHealthPercent: Int,
     val remainingCapacityAh: Float,
     val nominalCapacityAh: Float,
-    val cellVoltages: List<Float>,
-    val chargeMosEnabled: Boolean,
-    val dischargeMosEnabled: Boolean,
+    val cellCount: Int = 0,
+    val cellVoltages: List<Float> = emptyList(),
+    val chargeMosEnabled: Boolean = true,
+    val dischargeMosEnabled: Boolean = true,
     val protocolName: String = "Smart BMS"
+)
+
+data class PackAutoCalibration(
+    val cellCount: Int,
+    val nominalVoltage: Float,
+    val nominalCapacityAh: Float,
+    val capacityWh: Float
 )
 
 object PowerMath {
@@ -52,6 +61,52 @@ object PowerMath {
             h > 0 && m > 0 -> "${h}h ${m}m"
             h > 0 -> "${h}h"
             else -> "${m}m"
+        }
+    }
+
+    /**
+     * Automatically infers cell topology, nominal voltage (e.g., 12.8V for 4S LiFePO4),
+     * nominal Ah (e.g., 280 Ah), and total pack Wh (e.g., 3584 Wh) from live BMS telemetry.
+     */
+    fun inferPackCalibration(frame: ParsedBmsFrame): PackAutoCalibration? {
+        if (frame.voltageVolts < 5f) return null
+
+        val detectedCells = when {
+            frame.cellVoltages.isNotEmpty() -> frame.cellVoltages.size
+            frame.cellCount in 1..32 -> frame.cellCount
+            else -> inferCellCountFromVoltage(frame.voltageVolts)
+        }
+
+        val avgCellV = frame.voltageVolts / detectedCells.coerceAtLeast(1)
+        val perCellNominal = if (avgCellV > 3.68f) 3.7f else 3.2f
+        val nominalVoltage = ((detectedCells * perCellNominal) * 10f).roundToInt() / 10f
+
+        val nominalAh = when {
+            frame.nominalCapacityAh >= 2f -> frame.nominalCapacityAh
+            frame.remainingCapacityAh >= 1f && frame.socPercent >= 5 -> {
+                val est = frame.remainingCapacityAh / (frame.socPercent / 100f)
+                // Snap close to integer Ah when within 1.5% (e.g. 279.6 -> 280.0 Ah)
+                val rounded = est.roundToInt().toFloat()
+                if (abs(est - rounded) <= rounded * 0.015f) rounded else est
+            }
+            else -> return null
+        }
+
+        val capacityWh = (nominalAh * nominalVoltage).roundToInt().toFloat()
+        return PackAutoCalibration(
+            cellCount = detectedCells,
+            nominalVoltage = nominalVoltage,
+            nominalCapacityAh = nominalAh,
+            capacityWh = capacityWh
+        )
+    }
+
+    private fun inferCellCountFromVoltage(voltageVolts: Float): Int {
+        return when {
+            voltageVolts <= 16.5f -> 4   // 12.8V 4S LiFePO4 (10.0V - 14.6V)
+            voltageVolts <= 31.5f -> 8   // 25.6V 8S LiFePO4
+            voltageVolts <= 43.5f -> 12  // 38.4V 12S
+            else -> 16                   // 51.2V 16S LiFePO4
         }
     }
 }
@@ -101,8 +156,26 @@ object BmsProtocolParser {
         return frame
     }
 
+    fun computeJbdChecksum(frame: ByteArray, startIndex: Int, endExclusive: Int): Int {
+        var sum = 0
+        for (i in startIndex until endExclusive) {
+            sum += (frame[i].toInt() and 0xFF)
+        }
+        return (0x10000 - sum) and 0xFFFF
+    }
+
+    private fun verifyJbdChecksum(frame: ByteArray, dataLen: Int): Boolean {
+        val chkOffset = 4 + dataLen
+        if (frame.size < chkOffset + 3) return false
+        if (frame[chkOffset + 2] != 0x77.toByte()) return false
+        val actual = u16BE(frame[chkOffset], frame[chkOffset + 1])
+        val expectedFromStatus = computeJbdChecksum(frame, 2, chkOffset)
+        val expectedFromLen = computeJbdChecksum(frame, 3, chkOffset)
+        return actual == expectedFromStatus || actual == expectedFromLen
+    }
+
     /**
-     * Parses a JBD/Xiaoxiang 0x03 Basic Info response frame.
+     * Parses a JBD/Xiaoxiang 0x03 Basic Info response frame with strict length + checksum check.
      */
     fun parseJbdBasicInfo(frame: ByteArray, existingCells: List<Float> = emptyList()): ParsedBmsFrame? {
         if (frame.size < 27) return null
@@ -110,7 +183,7 @@ object BmsProtocolParser {
             return null
         }
         val dataLen = frame[3].toInt() and 0xFF
-        if (frame.size < dataLen + 7) return null
+        if (!verifyJbdChecksum(frame, dataLen)) return null
 
         val p = 4
         val voltageRaw = u16BE(frame[p], frame[p + 1])
@@ -122,6 +195,7 @@ object BmsProtocolParser {
         val mosStatus = frame[p + 20].toInt() and 0xFF
         val chargeMos = (mosStatus and 0x01) != 0
         val dischargeMos = (mosStatus and 0x02) != 0
+        val cellCount = if (dataLen >= 22) (frame[p + 21].toInt() and 0xFF).coerceIn(0, 32) else existingCells.size
 
         val ntcCount = if (dataLen >= 23) (frame[p + 22].toInt() and 0xFF) else 0
         val temps = mutableListOf<Float>()
@@ -138,7 +212,7 @@ object BmsProtocolParser {
         val voltage = voltageRaw / 100f
         val current = currentRaw / 100f
         val remainingAh = remainingCapRaw / 100f
-        val nominalAh = (nominalCapRaw / 100f).coerceAtLeast(1f)
+        val nominalAh = nominalCapRaw / 100f
         val soh = (100 - (cycleCount / 40)).coerceIn(70, 100)
 
         return ParsedBmsFrame(
@@ -151,6 +225,7 @@ object BmsProtocolParser {
             stateOfHealthPercent = soh,
             remainingCapacityAh = remainingAh,
             nominalCapacityAh = nominalAh,
+            cellCount = cellCount,
             cellVoltages = existingCells,
             chargeMosEnabled = chargeMos,
             dischargeMosEnabled = dischargeMos,
@@ -167,7 +242,8 @@ object BmsProtocolParser {
             return null
         }
         val dataLen = frame[3].toInt() and 0xFF
-        if (frame.size < dataLen + 7) return null
+        if (!verifyJbdChecksum(frame, dataLen)) return null
+
         val cellCount = dataLen / 2
         val cells = ArrayList<Float>(cellCount)
         for (i in 0 until cellCount) {
@@ -180,10 +256,15 @@ object BmsProtocolParser {
 
     /**
      * Parses a Daly 13-byte response frame (0xA5 0x01 <cmd> 0x08 ... <sum8>).
+     * Note: Byte 7 in 0x93 is BMS heartbeat/life counter (0..255), NOT cycle count.
      */
     fun parseDalyFrame(frame: ByteArray, existing: ParsedBmsFrame? = null): ParsedBmsFrame? {
         if (frame.size < 13) return null
         if (frame[0] != 0xA5.toByte()) return null
+        // Ignore echoed host request frames (addr = 0x40)
+        if (frame[1] == 0x40.toByte()) return null
+        if (frame[3] != 0x08.toByte()) return null
+
         val expectedSum = (0..11).sumOf { frame[it].toInt() and 0xFF } and 0xFF
         if ((frame[12].toInt() and 0xFF) != expectedSum) return null
 
@@ -196,7 +277,8 @@ object BmsProtocolParser {
             cycleCount = 0,
             stateOfHealthPercent = 100,
             remainingCapacityAh = 0f,
-            nominalCapacityAh = 20f,
+            nominalCapacityAh = 0f,
+            cellCount = 0,
             cellVoltages = emptyList(),
             chargeMosEnabled = true,
             dischargeMosEnabled = true,
@@ -208,12 +290,13 @@ object BmsProtocolParser {
                 val voltage = u16BE(frame[4], frame[5]) / 10f
                 val current = (u16BE(frame[8], frame[9]) - 30000) / 10f
                 val soc = (u16BE(frame[10], frame[11]) / 10f).toInt().coerceIn(0, 100)
-                base.copy(
+                val updated = base.copy(
                     socPercent = soc,
                     voltageVolts = voltage,
                     currentAmps = current,
                     protocolName = "Daly Smart BMS"
                 )
+                inferNominalForDaly(updated)
             }
             0x92 -> {
                 val maxTempC = (frame[4].toInt() and 0xFF) - 40f
@@ -227,18 +310,26 @@ object BmsProtocolParser {
             0x93 -> {
                 val chargeMos = (frame[5].toInt() and 0xFF) != 0
                 val dischargeMos = (frame[6].toInt() and 0xFF) != 0
-                val cycles = frame[7].toInt() and 0xFF
-                base.copy(
+                // Bytes 8..11 = remaining capacity in mAh (u32BE)
+                val remainingMah = u32BE(frame, 8)
+                val remainingAh = remainingMah / 1000f
+                val updated = base.copy(
                     chargeMosEnabled = chargeMos,
                     dischargeMosEnabled = dischargeMos,
-                    cycleCount = if (cycles > 0) cycles else base.cycleCount,
+                    remainingCapacityAh = if (remainingAh > 0f) remainingAh else base.remainingCapacityAh,
                     protocolName = "Daly Smart BMS"
                 )
+                inferNominalForDaly(updated)
             }
             0x94 -> {
-                val cycles = u16BE(frame[9], frame[10])
+                val cellCount = (frame[4].toInt() and 0xFF).coerceIn(1, 32)
+                // Some Daly firmwares encode cycle count in bytes 9..10; ignore invalid spikes > 10000
+                val rawCycles = u16BE(frame[9], frame[10])
+                val cycleCount = if (rawCycles in 1..10000) rawCycles else base.cycleCount
                 base.copy(
-                    cycleCount = cycles,
+                    cellCount = cellCount,
+                    cycleCount = cycleCount,
+                    stateOfHealthPercent = (100 - (cycleCount / 40)).coerceIn(70, 100),
                     protocolName = "Daly Smart BMS"
                 )
             }
@@ -246,8 +337,19 @@ object BmsProtocolParser {
         }
     }
 
+    private fun inferNominalForDaly(frame: ParsedBmsFrame): ParsedBmsFrame {
+        if (frame.nominalCapacityAh >= 2f) return frame
+        if (frame.remainingCapacityAh >= 1f && frame.socPercent >= 5) {
+            val est = frame.remainingCapacityAh / (frame.socPercent / 100f)
+            val rounded = est.roundToInt().toFloat()
+            val cleanNominal = if (abs(est - rounded) <= rounded * 0.015f) rounded else est
+            return frame.copy(nominalCapacityAh = cleanNominal)
+        }
+        return frame
+    }
+
     /**
-     * Parses a JK BMS 0x02 Cell Info telemetry frame (header 55 AA EB 90 02 ...).
+     * Parses a JK BMS 0x02 Cell Info telemetry frame (header 55 AA EB 90 02 ...) with CRC validation.
      */
     fun parseJkCellInfoFrame(frame: ByteArray): ParsedBmsFrame? {
         if (frame.size < 190) return null
@@ -258,6 +360,12 @@ object BmsProtocolParser {
             frame[4] != 0x02.toByte()
         ) {
             return null
+        }
+
+        // Verify trailing 8-bit sum checksum if full 300-byte frame is present
+        if (frame.size >= 300) {
+            val expectedCrc = (0 until 299).sumOf { frame[it].toInt() and 0xFF } and 0xFF
+            if ((frame[299].toInt() and 0xFF) != expectedCrc) return null
         }
 
         val cells = mutableListOf<Float>()
@@ -275,7 +383,7 @@ object BmsProtocolParser {
         val temp1 = s16LE(frame[162], frame[163]) / 10f
         val soc = (frame[173].toInt() and 0xFF).coerceIn(0, 100)
         val remAh = u32LE(frame, 174) / 1000f
-        val nomAh = (u32LE(frame, 178) / 1000f).coerceAtLeast(1f)
+        val nomAh = u32LE(frame, 178) / 1000f
         val cycles = u32LE(frame, 182).toInt().coerceAtLeast(0)
         val soh = (100 - (cycles / 40)).coerceIn(70, 100)
 
@@ -289,6 +397,7 @@ object BmsProtocolParser {
             stateOfHealthPercent = soh,
             remainingCapacityAh = remAh,
             nominalCapacityAh = nomAh,
+            cellCount = cells.size,
             cellVoltages = cells,
             chargeMosEnabled = true,
             dischargeMosEnabled = true,
@@ -302,6 +411,13 @@ object BmsProtocolParser {
     private fun s16BE(msb: Byte, lsb: Byte): Int {
         val u = u16BE(msb, lsb)
         return if (u and 0x8000 != 0) u - 0x10000 else u
+    }
+
+    private fun u32BE(buf: ByteArray, off: Int): Long {
+        return ((buf[off].toLong() and 0xFF) shl 24) or
+            ((buf[off + 1].toLong() and 0xFF) shl 16) or
+            ((buf[off + 2].toLong() and 0xFF) shl 8) or
+            (buf[off + 3].toLong() and 0xFF)
     }
 
     private fun u16LE(lsb: Byte, msb: Byte): Int =

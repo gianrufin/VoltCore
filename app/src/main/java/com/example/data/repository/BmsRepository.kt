@@ -5,6 +5,7 @@ import com.example.BuildConfig
 import com.example.data.ble.BleBmsManager
 import com.example.data.ble.BleUiState
 import com.example.data.ble.ParsedBmsFrame
+import com.example.data.ble.PowerMath
 import com.example.data.local.AlertEventEntity
 import com.example.data.local.BmsDao
 import com.example.data.local.PluggedDeviceEntity
@@ -20,6 +21,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 sealed interface UpdateCheckResult {
     data object Idle : UpdateCheckResult
@@ -53,6 +55,11 @@ class BmsRepository(context: Context) {
     val settingsFlow: Flow<AppSettings> = preferences.settingsFlow
     val bleStateFlow: Flow<BleUiState> = bleManager.state
 
+    // Cycle count stability guard: prevents transient outlier spikes (e.g., 6 -> 200 -> 6)
+    private var lastAcceptedCycleCount: Int? = null
+    private var pendingCycleCandidate: Int? = null
+    private var pendingCycleHits: Int = 0
+
     init {
         scope.launch {
             bleManager.frames.collect { (deviceName, frame) ->
@@ -66,6 +73,9 @@ class BmsRepository(context: Context) {
     }
 
     fun connectBleDevice(address: String, name: String) {
+        lastAcceptedCycleCount = null
+        pendingCycleCandidate = null
+        pendingCycleHits = 0
         scope.launch {
             preferences.saveLastConnectedDevice(address, name)
         }
@@ -76,13 +86,67 @@ class BmsRepository(context: Context) {
         bleManager.disconnect()
     }
 
+    private fun stabilizeCycleCount(rawCycles: Int): Int {
+        val current = lastAcceptedCycleCount
+        if (current == null) {
+            if (rawCycles >= 0) {
+                lastAcceptedCycleCount = rawCycles
+            }
+            return rawCycles.coerceAtLeast(0)
+        }
+        // Normal progression: identical or +1 cycle
+        if (rawCycles == current || rawCycles == current + 1) {
+            lastAcceptedCycleCount = rawCycles
+            pendingCycleCandidate = null
+            pendingCycleHits = 0
+            return rawCycles
+        }
+        // Outlier jump: require 3 consecutive consistent readings before accepting
+        if (rawCycles == pendingCycleCandidate) {
+            pendingCycleHits++
+            if (pendingCycleHits >= 3) {
+                lastAcceptedCycleCount = rawCycles
+                pendingCycleCandidate = null
+                pendingCycleHits = 0
+                return rawCycles
+            }
+        } else {
+            pendingCycleCandidate = rawCycles
+            pendingCycleHits = 1
+        }
+        return current
+    }
+
     private suspend fun persistAndEvaluateFrame(
         frame: ParsedBmsFrame,
         sourceType: String,
         deviceName: String
     ) {
+        val settings = preferences.settingsFlow.first()
+
+        // Auto-calibrate pack Wh, nominal V, and Ah directly from BMS info when enabled
+        if (settings.autoCalibrationEnabled) {
+            PowerMath.inferPackCalibration(frame)?.let { auto ->
+                val whChanged = abs(auto.capacityWh - settings.packCapacityWh) > 5f
+                val voltChanged = abs(auto.nominalVoltage - settings.packNominalVoltage) > 0.4f
+                val ahChanged = abs(auto.nominalCapacityAh - settings.packNominalAh) > 0.5f
+                val cellChanged = auto.cellCount != settings.detectedCellCount
+                if (whChanged || voltChanged || ahChanged || cellChanged) {
+                    preferences.updatePackCalibration(
+                        capacityWh = auto.capacityWh,
+                        nominalVoltage = auto.nominalVoltage,
+                        nominalAh = auto.nominalCapacityAh,
+                        cellCount = auto.cellCount
+                    )
+                }
+            }
+        }
+
+        val stableCycles = stabilizeCycleCount(frame.cycleCount)
+        val stableSoh = (100 - (stableCycles / 40)).coerceIn(70, 100)
         val powerWatts = frame.voltageVolts * frame.currentAmps
         val isCharging = frame.currentAmps > 0.1f
+
         val snapshot = TelemetrySnapshotEntity(
             timestampMs = System.currentTimeMillis(),
             socPercent = frame.socPercent,
@@ -91,10 +155,10 @@ class BmsRepository(context: Context) {
             powerWatts = powerWatts,
             temperatureCelsius = frame.temperatureCelsius,
             mosfetTempCelsius = frame.mosfetTempCelsius,
-            cycleCount = frame.cycleCount,
-            stateOfHealthPercent = frame.stateOfHealthPercent,
+            cycleCount = stableCycles,
+            stateOfHealthPercent = stableSoh,
             remainingCapacityAh = frame.remainingCapacityAh,
-            nominalCapacityAh = frame.nominalCapacityAh,
+            nominalCapacityAh = if (frame.nominalCapacityAh > 0f) frame.nominalCapacityAh else settings.packNominalAh,
             cellVoltagesCsv = frame.cellVoltages.joinToString(",") { "%.3f".format(it) },
             isCharging = isCharging,
             chargeMosEnabled = frame.chargeMosEnabled,
@@ -105,8 +169,8 @@ class BmsRepository(context: Context) {
         dao.insertSnapshot(snapshot)
         dao.pruneOldSnapshots()
 
-        val settings = preferences.settingsFlow.first()
-        notifier.evaluateAndNotify(snapshot, settings)
+        val updatedSettings = preferences.settingsFlow.first()
+        notifier.evaluateAndNotify(snapshot, updatedSettings)
     }
 
     suspend fun upsertPluggedDevice(device: PluggedDeviceEntity) {

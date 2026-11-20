@@ -259,6 +259,9 @@ fun VoltCoreApp(
                         composable(ROUTE_SETTINGS) {
                             SettingsScreen(
                                 uiState = settingsState,
+                                onToggleAutoCalibration = { enabled ->
+                                    viewModel.setAutoCalibrationEnabled(enabled)
+                                },
                                 onSaveCalibration = { wh, v ->
                                     viewModel.savePackCalibration(wh, v)
                                 },

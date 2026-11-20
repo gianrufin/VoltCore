@@ -43,12 +43,32 @@ import com.example.ui.theme.SlateMuted
 fun TelemetryGrid(
     snapshot: TelemetrySnapshotEntity,
     highTempThreshold: Float,
+    packNominalVoltage: Float = 12.8f,
+    packNominalAh: Float = 80f,
+    detectedCellCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val cells = snapshot.cellVoltagesList()
     val cellDeltaMv = if (cells.size >= 2) {
         ((cells.max() - cells.min()) * 1000f).toInt()
     } else null
+
+    val effectiveCells = if (cells.isNotEmpty()) cells.size else detectedCellCount
+    val voltageSubtitle = buildString {
+        if (effectiveCells > 0) append("${effectiveCells}S · ")
+        if (cellDeltaMv != null) {
+            append("Δ ${cellDeltaMv}mV")
+        } else {
+            append("Nom ${"%.1f".format(packNominalVoltage)}V")
+        }
+    }
+
+    val nominalAh = if (snapshot.nominalCapacityAh > 0f) snapshot.nominalCapacityAh else packNominalAh
+    val cycleSubtitle = if (snapshot.remainingCapacityAh > 0f) {
+        "${snapshot.remainingCapacityAh.toInt()}/${nominalAh.toInt()}Ah · ${snapshot.stateOfHealthPercent}% SoH"
+    } else {
+        "${nominalAh.toInt()}Ah · ${snapshot.stateOfHealthPercent}% SoH"
+    }
 
     val tempAccent = when {
         snapshot.temperatureCelsius >= highTempThreshold -> CriticalCoral
@@ -80,7 +100,7 @@ fun TelemetryGrid(
                 title = stringResource(R.string.metric_voltage),
                 value = "%.2f".format(snapshot.voltageVolts),
                 unit = "V",
-                subtitle = cellDeltaMv?.let { "Δ ${it} mV balance" } ?: "Pack terminal",
+                subtitle = voltageSubtitle,
                 icon = Icons.Rounded.ElectricBolt,
                 accentColor = PureWhite,
                 testTag = "metric_card_voltage",
@@ -116,7 +136,7 @@ fun TelemetryGrid(
                 title = stringResource(R.string.metric_cycles),
                 value = "${snapshot.cycleCount}",
                 unit = "CYC",
-                subtitle = "${snapshot.stateOfHealthPercent}% SoH",
+                subtitle = cycleSubtitle,
                 icon = Icons.Rounded.Autorenew,
                 accentColor = ElectricEmerald,
                 testTag = "metric_card_cycles",

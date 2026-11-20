@@ -17,8 +17,11 @@ private val Context.voltCoreDataStore: DataStore<Preferences> by preferencesData
 )
 
 data class AppSettings(
+    val autoCalibrationEnabled: Boolean = true,
     val packCapacityWh: Float = 1024f,
-    val packNominalVoltage: Float = 51.2f,
+    val packNominalVoltage: Float = 12.8f,
+    val packNominalAh: Float = 80f,
+    val detectedCellCount: Int = 0,
     val githubRepoSlug: String = "gianrufin/VoltCore",
     val chargeCompleteAlertEnabled: Boolean = true,
     val chargeTargetPercent: Int = 100,
@@ -33,8 +36,11 @@ data class AppSettings(
 class AppPreferences(private val context: Context) {
 
     private object Keys {
+        val AUTO_CALIBRATION = booleanPreferencesKey("auto_calibration_enabled")
         val PACK_CAPACITY_WH = floatPreferencesKey("pack_capacity_wh")
         val PACK_NOMINAL_VOLTAGE = floatPreferencesKey("pack_nominal_voltage")
+        val PACK_NOMINAL_AH = floatPreferencesKey("pack_nominal_ah")
+        val DETECTED_CELL_COUNT = intPreferencesKey("detected_cell_count")
         val GITHUB_REPO_SLUG = stringPreferencesKey("github_repo_slug")
         val CHARGE_COMPLETE_ALERT = booleanPreferencesKey("charge_complete_alert")
         val CHARGE_TARGET_PERCENT = intPreferencesKey("charge_target_percent")
@@ -48,8 +54,11 @@ class AppPreferences(private val context: Context) {
 
     val settingsFlow: Flow<AppSettings> = context.voltCoreDataStore.data.map { prefs ->
         AppSettings(
+            autoCalibrationEnabled = prefs[Keys.AUTO_CALIBRATION] ?: true,
             packCapacityWh = prefs[Keys.PACK_CAPACITY_WH] ?: 1024f,
-            packNominalVoltage = prefs[Keys.PACK_NOMINAL_VOLTAGE] ?: 51.2f,
+            packNominalVoltage = prefs[Keys.PACK_NOMINAL_VOLTAGE] ?: 12.8f,
+            packNominalAh = prefs[Keys.PACK_NOMINAL_AH] ?: 80f,
+            detectedCellCount = prefs[Keys.DETECTED_CELL_COUNT] ?: 0,
             githubRepoSlug = prefs[Keys.GITHUB_REPO_SLUG] ?: "gianrufin/VoltCore",
             chargeCompleteAlertEnabled = prefs[Keys.CHARGE_COMPLETE_ALERT] ?: true,
             chargeTargetPercent = prefs[Keys.CHARGE_TARGET_PERCENT] ?: 100,
@@ -62,10 +71,25 @@ class AppPreferences(private val context: Context) {
         )
     }
 
-    suspend fun updatePackCalibration(capacityWh: Float, nominalVoltage: Float) {
+    suspend fun setAutoCalibrationEnabled(enabled: Boolean) {
         context.voltCoreDataStore.edit { prefs ->
-            prefs[Keys.PACK_CAPACITY_WH] = capacityWh.coerceIn(50f, 50000f)
+            prefs[Keys.AUTO_CALIBRATION] = enabled
+        }
+    }
+
+    suspend fun updatePackCalibration(
+        capacityWh: Float,
+        nominalVoltage: Float,
+        nominalAh: Float = capacityWh / nominalVoltage.coerceAtLeast(1f),
+        cellCount: Int = 0
+    ) {
+        context.voltCoreDataStore.edit { prefs ->
+            prefs[Keys.PACK_CAPACITY_WH] = capacityWh.coerceIn(20f, 100000f)
             prefs[Keys.PACK_NOMINAL_VOLTAGE] = nominalVoltage.coerceIn(3.2f, 400f)
+            prefs[Keys.PACK_NOMINAL_AH] = nominalAh.coerceIn(1f, 5000f)
+            if (cellCount > 0) {
+                prefs[Keys.DETECTED_CELL_COUNT] = cellCount
+            }
         }
     }
 

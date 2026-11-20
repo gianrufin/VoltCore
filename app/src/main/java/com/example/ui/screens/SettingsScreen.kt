@@ -75,6 +75,7 @@ import com.example.ui.theme.SlateMuted
 @Composable
 fun SettingsScreen(
     uiState: SettingsUiState,
+    onToggleAutoCalibration: (Boolean) -> Unit,
     onSaveCalibration: (Float, Float) -> Unit,
     onUpdateChargeAlert: (Boolean, Int) -> Unit,
     onUpdateLowBatteryAlert: (Boolean, Int) -> Unit,
@@ -87,13 +88,24 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var capacityText by remember { mutableStateOf(uiState.settings.packCapacityWh.toInt().toString()) }
-    var nominalVText by remember { mutableStateOf(uiState.settings.packNominalVoltage.toString()) }
+    var nominalVText by remember { mutableStateOf("%.1f".format(uiState.settings.packNominalVoltage)) }
     var githubRepoText by remember { mutableStateOf(uiState.settings.githubRepoSlug) }
     var calibrationSavedMsg by remember { mutableStateOf(false) }
 
-    LaunchedEffect(uiState.settings) {
+    LaunchedEffect(
+        uiState.settings.packCapacityWh,
+        uiState.settings.packNominalVoltage,
+        uiState.settings.autoCalibrationEnabled,
+        uiState.settings.githubRepoSlug
+    ) {
         if (githubRepoText.isBlank() && uiState.settings.githubRepoSlug.isNotBlank()) {
             githubRepoText = uiState.settings.githubRepoSlug
+        }
+        if (uiState.settings.autoCalibrationEnabled || capacityText.isBlank()) {
+            capacityText = uiState.settings.packCapacityWh.toInt().toString()
+        }
+        if (uiState.settings.autoCalibrationEnabled || nominalVText.isBlank()) {
+            nominalVText = "%.1f".format(uiState.settings.packNominalVoltage)
         }
     }
 
@@ -443,6 +455,77 @@ fun SettingsScreen(
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.label_auto_calibration),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = PureWhite
+                                )
+                                Text(
+                                    text = stringResource(R.string.desc_auto_calibration),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = SlateMuted
+                                )
+                            }
+                            Switch(
+                                checked = uiState.settings.autoCalibrationEnabled,
+                                onCheckedChange = { enabled ->
+                                    calibrationSavedMsg = false
+                                    onToggleAutoCalibration(enabled)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = OledBlack,
+                                    checkedTrackColor = ElectricEmerald,
+                                    uncheckedThumbColor = SlateMuted,
+                                    uncheckedTrackColor = CarbonElevated
+                                ),
+                                modifier = Modifier.testTag("switch_auto_calibration")
+                            )
+                        }
+
+                        val detectedText = buildString {
+                            if (uiState.settings.detectedCellCount > 0) {
+                                append("${uiState.settings.detectedCellCount}S · ")
+                            }
+                            append("${uiState.settings.packNominalAh.toInt()} Ah · ")
+                            append("${"%.1f".format(uiState.settings.packNominalVoltage)} V · ")
+                            append("${uiState.settings.packCapacityWh.toInt()} Wh")
+                        }
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = CarbonElevated,
+                            border = BorderStroke(1.dp, HairlineBorder)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (uiState.settings.autoCalibrationEnabled) {
+                                        "AUTO-DETECTED PACK"
+                                    } else {
+                                        "ACTIVE PACK PROFILE"
+                                    },
+                                    style = MonoLabelSmall,
+                                    color = SlateMuted
+                                )
+                                Text(
+                                    text = detectedText,
+                                    style = MonoLabelSmall,
+                                    color = ElectricEmerald,
+                                    modifier = Modifier.testTag("detected_pack_summary")
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             OutlinedTextField(
@@ -451,6 +534,7 @@ fun SettingsScreen(
                                     calibrationSavedMsg = false
                                     capacityText = it.filter { c -> c.isDigit() || c == '.' }
                                 },
+                                enabled = !uiState.settings.autoCalibrationEnabled,
                                 label = { Text(stringResource(R.string.label_pack_capacity_wh)) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
@@ -465,6 +549,7 @@ fun SettingsScreen(
                                     calibrationSavedMsg = false
                                     nominalVText = it.filter { c -> c.isDigit() || c == '.' }
                                 },
+                                enabled = !uiState.settings.autoCalibrationEnabled,
                                 label = { Text(stringResource(R.string.label_pack_nominal_v)) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 singleLine = true,
@@ -480,34 +565,36 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (calibrationSavedMsg) {
-                                Text(
-                                    text = "Calibration saved",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = ElectricEmerald
-                                )
-                            } else {
-                                Text(
-                                    text = "Used for hours remaining math",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = SlateMuted
-                                )
-                            }
-
-                            Button(
-                                onClick = {
-                                    val wh = capacityText.toFloatOrNull() ?: 1024f
-                                    val v = nominalVText.toFloatOrNull() ?: 51.2f
-                                    onSaveCalibration(wh, v)
-                                    calibrationSavedMsg = true
+                            Text(
+                                text = when {
+                                    uiState.settings.autoCalibrationEnabled -> "Synced from BMS telemetry"
+                                    calibrationSavedMsg -> "Manual calibration saved"
+                                    else -> "Manual override for hours remaining"
                                 },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = CarbonElevated,
-                                    contentColor = PureWhite
-                                ),
-                                modifier = Modifier.testTag("save_calibration_button")
-                            ) {
-                                Text(stringResource(R.string.action_save))
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (calibrationSavedMsg || uiState.settings.autoCalibrationEnabled) {
+                                    ElectricEmerald
+                                } else {
+                                    SlateMuted
+                                }
+                            )
+
+                            if (!uiState.settings.autoCalibrationEnabled) {
+                                Button(
+                                    onClick = {
+                                        val wh = capacityText.toFloatOrNull() ?: uiState.settings.packCapacityWh
+                                        val v = nominalVText.toFloatOrNull() ?: uiState.settings.packNominalVoltage
+                                        onSaveCalibration(wh, v)
+                                        calibrationSavedMsg = true
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = CarbonElevated,
+                                        contentColor = PureWhite
+                                    ),
+                                    modifier = Modifier.testTag("save_calibration_button")
+                                ) {
+                                    Text(stringResource(R.string.action_save))
+                                }
                             }
                         }
                     }

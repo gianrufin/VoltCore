@@ -215,6 +215,12 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun setAutoCalibrationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.preferences.setAutoCalibrationEnabled(enabled)
+        }
+    }
+
     fun savePackCalibration(capacityWh: Float, nominalVoltage: Float) {
         viewModelScope.launch {
             repository.preferences.updatePackCalibration(capacityWh, nominalVoltage)

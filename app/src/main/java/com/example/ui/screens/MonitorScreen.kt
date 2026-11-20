@@ -133,6 +133,9 @@ fun MonitorScreen(
                             formattedEta = uiState.formattedEta,
                             remainingWh = uiState.remainingWh,
                             packCapacityWh = uiState.packCapacityWh,
+                            packNominalVoltage = uiState.settings.packNominalVoltage,
+                            packNominalAh = uiState.settings.packNominalAh,
+                            detectedCellCount = uiState.settings.detectedCellCount,
                             modifier = Modifier.weight(1f)
                         )
                         Column(
@@ -141,7 +144,10 @@ fun MonitorScreen(
                         ) {
                             TelemetryGrid(
                                 snapshot = uiState.snapshot,
-                                highTempThreshold = uiState.settings.highTempThresholdCelsius
+                                highTempThreshold = uiState.settings.highTempThresholdCelsius,
+                                packNominalVoltage = uiState.settings.packNominalVoltage,
+                                packNominalAh = uiState.settings.packNominalAh,
+                                detectedCellCount = uiState.settings.detectedCellCount
                             )
                             PluggedDevicesSection(
                                 devices = uiState.pluggedDevices,
@@ -164,14 +170,20 @@ fun MonitorScreen(
                         snapshot = uiState.snapshot,
                         formattedEta = uiState.formattedEta,
                         remainingWh = uiState.remainingWh,
-                        packCapacityWh = uiState.packCapacityWh
+                        packCapacityWh = uiState.packCapacityWh,
+                        packNominalVoltage = uiState.settings.packNominalVoltage,
+                        packNominalAh = uiState.settings.packNominalAh,
+                        detectedCellCount = uiState.settings.detectedCellCount
                     )
                 }
 
                 item {
                     TelemetryGrid(
                         snapshot = uiState.snapshot,
-                        highTempThreshold = uiState.settings.highTempThresholdCelsius
+                        highTempThreshold = uiState.settings.highTempThresholdCelsius,
+                        packNominalVoltage = uiState.settings.packNominalVoltage,
+                        packNominalAh = uiState.settings.packNominalAh,
+                        detectedCellCount = uiState.settings.detectedCellCount
                     )
                 }
 

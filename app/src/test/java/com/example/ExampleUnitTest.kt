@@ -33,7 +33,7 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun `jbd basic info parser decodes voltage current soc temp and cycles`() {
+    fun `jbd basic info parser decodes voltage current soc temp and cycles and rejects bad checksum`() {
         val frame = byteArrayOf(
             0xDD.toByte(), 0x03, 0x00, 0x19,
             0x14, 0x00,
@@ -53,6 +53,10 @@ class ExampleUnitTest {
             0x00, 0x00,
             0x77
         )
+        val checksum = BmsProtocolParser.computeJbdChecksum(frame, 2, 29)
+        frame[29] = ((checksum shr 8) and 0xFF).toByte()
+        frame[30] = (checksum and 0xFF).toByte()
+
         val parsed = BmsProtocolParser.parseJbdBasicInfo(frame)
         assertNotNull(parsed)
         assertEquals(51.20f, parsed!!.voltageVolts, 0.01f)
@@ -60,29 +64,65 @@ class ExampleUnitTest {
         assertEquals(80, parsed.socPercent)
         assertEquals(120, parsed.cycleCount)
         assertEquals(30.0f, parsed.temperatureCelsius, 0.1f)
+        assertEquals(16, parsed.cellCount)
         assertTrue(parsed.chargeMosEnabled)
         assertTrue(parsed.dischargeMosEnabled)
+
+        // Corrupt a payload byte and verify checksum rejects fragmented/garbled frames
+        val corrupt = frame.copyOf()
+        corrupt[13] = 0xFF.toByte()
+        org.junit.Assert.assertNull(BmsProtocolParser.parseJbdBasicInfo(corrupt))
     }
 
     @Test
-    fun `daly parser decodes 0x90 voltage current soc and checksum`() {
-        // 0xA5 0x01 0x90 0x08 [51.2V -> 512 = 0x0200] [0,0] [30050 -> +5.0A = 0x7562] [85.0% -> 850 = 0x0352]
-        val frame = byteArrayOf(
+    fun `daly parser decodes 0x90 and 0x94 cycles while ignoring 0x93 heartbeat counter`() {
+        // 0x90: 13.2V (132 = 0x0084), +0.0A (30000 = 0x7530), 50.0% SoC (500 = 0x01F4)
+        val socFrame = byteArrayOf(
             0xA5.toByte(), 0x01, 0x90.toByte(), 0x08,
-            0x02, 0x00,
+            0x00, 0x84.toByte(),
             0x00, 0x00,
-            0x75, 0x62,
-            0x03, 0x52,
+            0x75, 0x30,
+            0x01, 0xF4.toByte(),
             0x00
         )
-        val sum = (0..11).sumOf { frame[it].toInt() and 0xFF } and 0xFF
-        frame[12] = sum.toByte()
+        socFrame[12] = ((0..11).sumOf { socFrame[it].toInt() and 0xFF } and 0xFF).toByte()
+        val afterSoc = BmsProtocolParser.parseDalyFrame(socFrame)
+        assertNotNull(afterSoc)
+        assertEquals(13.2f, afterSoc!!.voltageVolts, 0.1f)
+        assertEquals(50, afterSoc.socPercent)
 
-        val parsed = BmsProtocolParser.parseDalyFrame(frame)
-        assertNotNull(parsed)
-        assertEquals(51.2f, parsed!!.voltageVolts, 0.1f)
-        assertEquals(5.0f, parsed.currentAmps, 0.1f)
-        assertEquals(85, parsed.socPercent)
+        // 0x94: 4 cells, cycleCount = 6 (bytes 9..10)
+        val statusFrame = byteArrayOf(
+            0xA5.toByte(), 0x01, 0x94.toByte(), 0x08,
+            0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00
+        )
+        statusFrame[12] = ((0..11).sumOf { statusFrame[it].toInt() and 0xFF } and 0xFF).toByte()
+        val afterStatus = BmsProtocolParser.parseDalyFrame(statusFrame, afterSoc)
+        assertNotNull(afterStatus)
+        assertEquals(6, afterStatus!!.cycleCount)
+        assertEquals(4, afterStatus.cellCount)
+
+        // 0x93: byte 7 is BMS heartbeat = 200 (0xC8), bytes 8..11 remaining = 140,000 mAh (0x000222E0)
+        val mosFrame = byteArrayOf(
+            0xA5.toByte(), 0x01, 0x93.toByte(), 0x08,
+            0x01, 0x01, 0x01, 0xC8.toByte(),
+            0x00, 0x02, 0x22, 0xE0.toByte(),
+            0x00
+        )
+        mosFrame[12] = ((0..11).sumOf { mosFrame[it].toInt() and 0xFF } and 0xFF).toByte()
+        val afterMos = BmsProtocolParser.parseDalyFrame(mosFrame, afterStatus)
+        assertNotNull(afterMos)
+        // Must remain 6 cycles (never jump to heartbeat 200) and infer 280 Ah from 140 Ah @ 50% SoC
+        assertEquals(6, afterMos!!.cycleCount)
+        assertEquals(140.0f, afterMos.remainingCapacityAh, 0.1f)
+        assertEquals(280.0f, afterMos.nominalCapacityAh, 0.5f)
+
+        val autoCal = PowerMath.inferPackCalibration(afterMos)
+        assertNotNull(autoCal)
+        assertEquals(4, autoCal!!.cellCount)
+        assertEquals(12.8f, autoCal.nominalVoltage, 0.01f)
+        assertEquals(280.0f, autoCal.nominalCapacityAh, 0.5f)
+        assertEquals(3584f, autoCal.capacityWh, 10f)
     }
 
     @Test
