@@ -1,0 +1,92 @@
+<resources>
+    <string name="app_name">VoltCore</string>
+
+    <!-- Navigation -->
+    <string name="nav_monitor">Monitor</string>
+    <string name="nav_diagnostics">Diagnostics</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Connection Status -->
+    <string name="action_connect_bms">Connect BMS</string>
+    <string name="action_disconnect">Disconnect</string>
+    <string name="status_live_ble">LIVE BLE</string>
+    <string name="status_simulated">SIMULATED PACK</string>
+    <string name="status_offline_cached">OFFLINE CACHED</string>
+    <string name="status_awaiting_connection">AWAITING PACK</string>
+
+    <!-- Monitor Screen -->
+    <string name="label_soc_unit">%</string>
+    <string name="label_charging">CHARGING</string>
+    <string name="label_discharging">DISCHARGING</string>
+    <string name="label_standby">STANDBY</string>
+    <string name="label_time_to_full">to 100% full</string>
+    <string name="label_time_remaining">remaining</string>
+    <string name="label_idle_eta">No active draw</string>
+    <string name="label_input_power">INPUT</string>
+    <string name="label_output_power">OUTPUT</string>
+    <string name="label_capacity_remaining">REMAINING</string>
+
+    <!-- Critical Diagnostics Grid -->
+    <string name="section_critical_diagnostics">REAL-TIME DIAGNOSTICS</string>
+    <string name="metric_voltage">VOLTAGE</string>
+    <string name="metric_current">CURRENT</string>
+    <string name="metric_temperature">TEMPERATURE</string>
+    <string name="metric_cycles">CYCLE COUNT</string>
+
+    <!-- Plugged Devices -->
+    <string name="section_plugged_devices">PLUGGED DEVICES</string>
+    <string name="action_add_device">Add Load</string>
+    <string name="empty_plugged_devices">No plugged devices tracked yet. Add USB-C, AC, or 12V DC loads to monitor draw.</string>
+    <string name="dialog_add_device_title">Track Plugged Device</string>
+    <string name="dialog_edit_device_title">Edit Plugged Device</string>
+    <string name="label_device_name">Device Name</string>
+    <string name="label_device_watts">Estimated Draw (W)</string>
+    <string name="label_device_port">Output Port</string>
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Remove</string>
+
+    <!-- Empty Monitor State -->
+    <string name="empty_monitor_title">Connect Power Pack</string>
+    <string name="empty_monitor_body">Scan for a Bluetooth Smart BMS (JBD, JK, Daly) or start the Simulated Test Pack to stream live wattage, runtime ETA, and diagnostics.</string>
+    <string name="action_start_simulator">Launch Test Pack</string>
+
+    <!-- BLE Sheet -->
+    <string name="ble_sheet_title">Smart BMS Connection</string>
+    <string name="ble_scanning">Scanning nearby BLE packs…</string>
+    <string name="ble_scan_again">Scan Nearby BMS</string>
+    <string name="ble_stop_scan">Stop Scan</string>
+    <string name="ble_permission_needed">Bluetooth permission is required to scan and read Smart BMS telemetry.</string>
+    <string name="ble_grant_permission">Grant Bluetooth Access</string>
+    <string name="ble_no_hardware">Bluetooth LE is unavailable on this device. Use Offline Cached Mode or Simulated Test Pack below.</string>
+    <string name="ble_simulator_section">BENCH SIMULATOR</string>
+    <string name="ble_simulator_desc">Test charging/discharging curves, hours remaining math, and threshold alerts without physical hardware.</string>
+
+    <!-- Diagnostics Screen -->
+    <string name="diagnostics_title">Diagnostics &amp; Cache</string>
+    <string name="section_trend_history">OFFLINE CACHE TRENDS</string>
+    <string name="section_cell_balance">CELL VOLTAGE BALANCE</string>
+    <string name="section_alert_log">HEALTH &amp; ALERT LOG</string>
+    <string name="empty_diagnostics_history">No cached samples recorded yet. Connect a BMS or launch the Test Pack to populate offline telemetry.</string>
+    <string name="empty_alert_log">No battery health alerts triggered.</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">System Settings</string>
+    <string name="section_pack_calibration">PACK CALIBRATION</string>
+    <string name="label_pack_capacity_wh">Pack Capacity (Wh)</string>
+    <string name="label_pack_nominal_v">Nominal Voltage (V)</string>
+    <string name="section_alerts">HEALTH &amp; CHARGE ALERTS</string>
+    <string name="label_notifications_permission">Push Alerts Permission</string>
+    <string name="action_enable_notifications">Enable Alerts</string>
+    <string name="action_send_test_alert">Send Test Alert</string>
+    <string name="label_charge_complete_alert">Charge Complete Alert</string>
+    <string name="label_low_soc_alert">Low Battery Alert</string>
+    <string name="label_high_temp_alert">High Temperature Alert</string>
+    <string name="section_github_updater">GITHUB APK UPDATER</string>
+    <string name="label_github_repo">GitHub Repository (owner/repo)</string>
+    <string name="hint_github_repo">e.g. username/voltcore-bms</string>
+    <string name="action_check_updates">Check GitHub Releases</string>
+    <string name="action_download_apk">Download &amp; Install APK</string>
+    <string name="section_offline_storage">OFFLINE STORAGE</string>
+    <string name="action_clear_cache">Clear Cached History</string>
+</resources>

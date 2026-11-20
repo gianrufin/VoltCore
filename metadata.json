@@ -1,0 +1,6 @@
+{
+  "name": "VoltCore",
+  "description": "Minimalist OLED-dark Smart BMS power pack monitor with real-time EcoFlow-style SoC, voltage, current, temperature, cycle count diagnostics, offline Room caching, local health alerts, and GitHub Releases APK updater.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
