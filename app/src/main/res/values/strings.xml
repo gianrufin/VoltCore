@@ -69,6 +69,11 @@
 
     <!-- Settings Screen -->
     <string name="settings_title">System Settings</string>
+    <string name="section_display_units">DISPLAY &amp; UNITS</string>
+    <string name="label_display_density">Display Density</string>
+    <string name="density_minimal">Minimal</string>
+    <string name="density_detailed">Detailed</string>
+    <string name="label_temperature_unit">Temperature Unit</string>
     <string name="section_pack_calibration">PACK CALIBRATION</string>
     <string name="label_auto_calibration">Auto-Detect from BMS</string>
     <string name="desc_auto_calibration">Reads Ah, voltage, cells &amp; Wh automatically</string>
@@ -81,6 +86,7 @@
     <string name="label_charge_complete_alert">Charge Complete Alert</string>
     <string name="label_low_soc_alert">Low Battery Alert</string>
     <string name="label_high_temp_alert">High Temperature Alert</string>
+    <string name="label_cold_charge_alert">Cold-Temp Charge Warning</string>
     <string name="section_github_updater">GITHUB APK UPDATER</string>
     <string name="label_github_repo">GitHub Repository (owner/repo)</string>
     <string name="hint_github_repo">e.g. gianrufin/VoltCore</string>

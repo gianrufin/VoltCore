@@ -7,6 +7,7 @@ enum class BmsAlertType {
     CHARGE_COMPLETE,
     LOW_SOC,
     HIGH_TEMP,
+    COLD_CHARGE,
     OVER_CURRENT
 }
 

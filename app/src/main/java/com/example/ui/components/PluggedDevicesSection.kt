@@ -49,8 +49,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.data.ble.PowerMath
 import com.example.data.local.OutputPortType
 import com.example.data.local.PluggedDeviceEntity
+import com.example.data.prefs.DisplayDensity
 import com.example.ui.theme.CarbonElevated
 import com.example.ui.theme.CarbonSurface
 import com.example.ui.theme.CyanDim
@@ -69,6 +71,8 @@ fun PluggedDevicesSection(
     devices: List<PluggedDeviceEntity>,
     activePluggedWatts: Float,
     packOutputWatts: Float,
+    remainingWh: Float = 0f,
+    displayDensity: DisplayDensity = DisplayDensity.MINIMAL,
     onSaveDevice: (Long, String, OutputPortType, Float) -> Unit,
     onToggleDevice: (PluggedDeviceEntity) -> Unit,
     onDeleteDevice: (Long) -> Unit,
@@ -170,8 +174,17 @@ fun PluggedDevicesSection(
             )
 
             devices.forEach { device ->
+                val soloHours = if (device.isActive) {
+                    PowerMath.computeDeviceSoloRuntimeHours(remainingWh, device.estimatedWatts)
+                } else null
+                val sharePercent = if (device.isActive && activePluggedWatts > 0f && displayDensity == DisplayDensity.DETAILED) {
+                    ((device.estimatedWatts / activePluggedWatts) * 100f).toInt().coerceIn(0, 100)
+                } else null
+
                 PluggedDeviceRow(
                     device = device,
+                    soloRuntimeLabel = soloHours?.let { PowerMath.formatDurationHours(it) },
+                    sharePercent = sharePercent,
                     onClick = { editingDevice = device },
                     onToggle = { onToggleDevice(device) },
                     onDelete = { onDeleteDevice(device.id) }
@@ -206,6 +219,8 @@ fun PluggedDevicesSection(
 @Composable
 private fun PluggedDeviceRow(
     device: PluggedDeviceEntity,
+    soloRuntimeLabel: String?,
+    sharePercent: Int?,
     onClick: () -> Unit,
     onToggle: () -> Unit,
     onDelete: () -> Unit
@@ -217,6 +232,16 @@ private fun PluggedDeviceRow(
         OutputPortType.AC_OUT -> Icons.Rounded.ElectricalServices
         OutputPortType.DC_12V -> Icons.Rounded.Power
         OutputPortType.ANDERSON -> Icons.Rounded.Power
+    }
+
+    val subtitleText = buildString {
+        append(port.label)
+        if (soloRuntimeLabel != null) {
+            append(" · ~$soloRuntimeLabel")
+        }
+        if (sharePercent != null) {
+            append(" · $sharePercent%")
+        }
     }
 
     Surface(
@@ -256,9 +281,10 @@ private fun PluggedDeviceRow(
                     color = if (device.isActive) PureWhite else SlateMuted
                 )
                 Text(
-                    text = port.label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = SlateMuted
+                    text = subtitleText,
+                    style = MonoLabelSmall,
+                    color = if (device.isActive && soloRuntimeLabel != null) PrecisionCyan else SlateMuted,
+                    maxLines = 1
                 )
             }
 

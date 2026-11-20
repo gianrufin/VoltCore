@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.data.ble.PowerMath
 import com.example.data.local.AlertEventEntity
 import com.example.ui.DiagnosticsUiState
 import com.example.ui.theme.AmberDim
@@ -168,11 +169,14 @@ fun DiagnosticsScreen(
                 }
 
                 item {
+                    val tempUnit = uiState.temperatureUnit
+                    val tempSymbol = PowerMath.tempUnitSymbol(tempUnit)
+                    val latestTempC = uiState.recentSnapshots.last().temperatureCelsius
                     TelemetrySparklineCard(
                         title = "PACK TEMPERATURE",
-                        latestFormatted = "%.1f °C".format(uiState.recentSnapshots.last().temperatureCelsius),
-                        values = uiState.recentSnapshots.map { it.temperatureCelsius },
-                        unit = "°C",
+                        latestFormatted = "${"%.1f".format(PowerMath.convertTemp(latestTempC, tempUnit))} $tempSymbol",
+                        values = uiState.recentSnapshots.map { PowerMath.convertTemp(it.temperatureCelsius, tempUnit) },
+                        unit = tempSymbol,
                         lineColor = ElectricEmerald,
                         testTag = "chart_temperature"
                     )
@@ -437,7 +441,9 @@ private fun CellBalanceCard(cells: List<Float>) {
 private fun AlertLogRow(alert: AlertEventEntity) {
     val formatter = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
     val timeText = formatter.format(Date(alert.timestampMs))
-    val isWarning = alert.alertType == "HIGH_TEMP" || alert.alertType == "LOW_SOC"
+    val isWarning = alert.alertType == "HIGH_TEMP" ||
+        alert.alertType == "LOW_SOC" ||
+        alert.alertType == "COLD_CHARGE"
 
     Surface(
         modifier = Modifier.fillMaxWidth(),

@@ -136,6 +136,8 @@ fun MonitorScreen(
                             packNominalVoltage = uiState.settings.packNominalVoltage,
                             packNominalAh = uiState.settings.packNominalAh,
                             detectedCellCount = uiState.settings.detectedCellCount,
+                            passThroughFlow = uiState.passThroughFlow,
+                            displayDensity = uiState.settings.displayDensity,
                             modifier = Modifier.weight(1f)
                         )
                         Column(
@@ -145,9 +147,11 @@ fun MonitorScreen(
                             TelemetryGrid(
                                 snapshot = uiState.snapshot,
                                 highTempThreshold = uiState.settings.highTempThresholdCelsius,
+                                coldChargeThreshold = uiState.settings.coldChargeThresholdCelsius,
                                 packNominalVoltage = uiState.settings.packNominalVoltage,
                                 packNominalAh = uiState.settings.packNominalAh,
-                                detectedCellCount = uiState.settings.detectedCellCount
+                                detectedCellCount = uiState.settings.detectedCellCount,
+                                temperatureUnit = uiState.settings.temperatureUnit
                             )
                             PluggedDevicesSection(
                                 devices = uiState.pluggedDevices,
@@ -157,6 +161,8 @@ fun MonitorScreen(
                                 } else {
                                     0f
                                 },
+                                remainingWh = uiState.remainingWh,
+                                displayDensity = uiState.settings.displayDensity,
                                 onSaveDevice = onSavePluggedDevice,
                                 onToggleDevice = onTogglePluggedDevice,
                                 onDeleteDevice = onDeletePluggedDevice
@@ -173,7 +179,9 @@ fun MonitorScreen(
                         packCapacityWh = uiState.packCapacityWh,
                         packNominalVoltage = uiState.settings.packNominalVoltage,
                         packNominalAh = uiState.settings.packNominalAh,
-                        detectedCellCount = uiState.settings.detectedCellCount
+                        detectedCellCount = uiState.settings.detectedCellCount,
+                        passThroughFlow = uiState.passThroughFlow,
+                        displayDensity = uiState.settings.displayDensity
                     )
                 }
 
@@ -181,9 +189,11 @@ fun MonitorScreen(
                     TelemetryGrid(
                         snapshot = uiState.snapshot,
                         highTempThreshold = uiState.settings.highTempThresholdCelsius,
+                        coldChargeThreshold = uiState.settings.coldChargeThresholdCelsius,
                         packNominalVoltage = uiState.settings.packNominalVoltage,
                         packNominalAh = uiState.settings.packNominalAh,
-                        detectedCellCount = uiState.settings.detectedCellCount
+                        detectedCellCount = uiState.settings.detectedCellCount,
+                        temperatureUnit = uiState.settings.temperatureUnit
                     )
                 }
 
@@ -196,6 +206,8 @@ fun MonitorScreen(
                         } else {
                             0f
                         },
+                        remainingWh = uiState.remainingWh,
+                        displayDensity = uiState.settings.displayDensity,
                         onSaveDevice = onSavePluggedDevice,
                         onToggleDevice = onTogglePluggedDevice,
                         onDeleteDevice = onDeletePluggedDevice

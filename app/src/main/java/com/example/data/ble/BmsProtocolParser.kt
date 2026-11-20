@@ -1,5 +1,6 @@
 package com.example.data.ble
 
+import com.example.data.prefs.TemperatureUnit
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -25,6 +26,15 @@ data class PackAutoCalibration(
     val nominalVoltage: Float,
     val nominalCapacityAh: Float,
     val capacityWh: Float
+)
+
+data class PassThroughFlow(
+    val grossInWatts: Float = 0f,
+    val netPackWatts: Float = 0f,
+    val loadOutWatts: Float = 0f,
+    val isCharging: Boolean = false,
+    val isPassThroughActive: Boolean = false,
+    val isFloatCarryActive: Boolean = false
 )
 
 object PowerMath {
@@ -108,6 +118,67 @@ object PowerMath {
             voltageVolts <= 43.5f -> 12  // 38.4V 12S
             else -> 16                   // 51.2V 16S LiFePO4
         }
+    }
+
+    /**
+     * Computes Gross Charge In, Net Battery Flow, and Tracked Load Out for single-shunt Smart BMS units.
+     * Supports net-positive simultaneous charging+discharging and float-carry (~0W net while alternator carries loads).
+     */
+    fun computePassThroughFlow(
+        netPowerWatts: Float,
+        activePluggedWatts: Float,
+        chargeMosEnabled: Boolean
+    ): PassThroughFlow {
+        val loadOut = activePluggedWatts.coerceAtLeast(0f)
+        val hasActiveLoad = loadOut > 0.5f
+
+        return when {
+            netPowerWatts > 1.5f -> PassThroughFlow(
+                grossInWatts = netPowerWatts + loadOut,
+                netPackWatts = netPowerWatts,
+                loadOutWatts = loadOut,
+                isCharging = true,
+                isPassThroughActive = hasActiveLoad,
+                isFloatCarryActive = false
+            )
+            abs(netPowerWatts) <= 1.5f && chargeMosEnabled && hasActiveLoad -> PassThroughFlow(
+                grossInWatts = loadOut,
+                netPackWatts = 0f,
+                loadOutWatts = loadOut,
+                isCharging = false,
+                isPassThroughActive = true,
+                isFloatCarryActive = true
+            )
+            else -> PassThroughFlow(
+                grossInWatts = 0f,
+                netPackWatts = netPowerWatts,
+                loadOutWatts = loadOut,
+                isCharging = false,
+                isPassThroughActive = false,
+                isFloatCarryActive = false
+            )
+        }
+    }
+
+    fun computeDeviceSoloRuntimeHours(remainingWh: Float, deviceWatts: Float): Float? {
+        if (remainingWh <= 0f || deviceWatts < 1f) return null
+        return remainingWh / deviceWatts
+    }
+
+    fun convertTemp(celsius: Float, unit: TemperatureUnit): Float = when (unit) {
+        TemperatureUnit.CELSIUS -> celsius
+        TemperatureUnit.FAHRENHEIT -> (celsius * 9f / 5f) + 32f
+    }
+
+    fun tempUnitSymbol(unit: TemperatureUnit): String = when (unit) {
+        TemperatureUnit.CELSIUS -> "°C"
+        TemperatureUnit.FAHRENHEIT -> "°F"
+    }
+
+    fun formatTempWithUnit(celsius: Float, unit: TemperatureUnit, decimals: Int = 1): String {
+        val converted = convertTemp(celsius, unit)
+        val num = "%.${decimals}f".format(converted)
+        return "$num${tempUnitSymbol(unit)}"
     }
 }
 

@@ -91,11 +91,42 @@ class BatteryAlertNotifier(
         if (settings.highTempAlertEnabled &&
             snapshot.temperatureCelsius >= settings.highTempThresholdCelsius
         ) {
+            val tempText = com.example.data.ble.PowerMath.formatTempWithUnit(
+                snapshot.temperatureCelsius,
+                settings.temperatureUnit
+            )
+            val limitText = com.example.data.ble.PowerMath.formatTempWithUnit(
+                settings.highTempThresholdCelsius,
+                settings.temperatureUnit,
+                decimals = 0
+            )
             triggerAlert(
                 type = BmsAlertType.HIGH_TEMP,
-                title = "High Pack Temperature (${"%.1f".format(snapshot.temperatureCelsius)}°C)",
-                message = "Battery thermal sensor exceeded ${settings.highTempThresholdCelsius.toInt()}°C threshold.",
-                metricValue = "${"%.1f".format(snapshot.temperatureCelsius)}°C",
+                title = "High Pack Temperature ($tempText)",
+                message = "Battery thermal sensor exceeded $limitText threshold.",
+                metricValue = tempText,
+                nowMs = now
+            )
+        }
+
+        if (settings.coldChargeAlertEnabled &&
+            snapshot.isCharging &&
+            snapshot.temperatureCelsius <= settings.coldChargeThresholdCelsius
+        ) {
+            val tempText = com.example.data.ble.PowerMath.formatTempWithUnit(
+                snapshot.temperatureCelsius,
+                settings.temperatureUnit
+            )
+            val limitText = com.example.data.ble.PowerMath.formatTempWithUnit(
+                settings.coldChargeThresholdCelsius,
+                settings.temperatureUnit,
+                decimals = 0
+            )
+            triggerAlert(
+                type = BmsAlertType.COLD_CHARGE,
+                title = "Sub-Zero Charge Warning ($tempText)",
+                message = "${snapshot.deviceName} is charging at $tempText (limit $limitText). Stop LiFePO4 charging to protect cells.",
+                metricValue = tempText,
                 nowMs = now
             )
         }

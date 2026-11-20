@@ -259,6 +259,12 @@ fun VoltCoreApp(
                         composable(ROUTE_SETTINGS) {
                             SettingsScreen(
                                 uiState = settingsState,
+                                onSelectDisplayDensity = { density ->
+                                    viewModel.setDisplayDensity(density)
+                                },
+                                onSelectTemperatureUnit = { unit ->
+                                    viewModel.setTemperatureUnit(unit)
+                                },
                                 onToggleAutoCalibration = { enabled ->
                                     viewModel.setAutoCalibrationEnabled(enabled)
                                 },
@@ -273,6 +279,9 @@ fun VoltCoreApp(
                                 },
                                 onUpdateHighTempAlert = { enabled, temp ->
                                     viewModel.updateHighTempAlert(enabled, temp)
+                                },
+                                onUpdateColdChargeAlert = { enabled, temp ->
+                                    viewModel.updateColdChargeAlert(enabled, temp)
                                 },
                                 onRequestNotificationPermission = {
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

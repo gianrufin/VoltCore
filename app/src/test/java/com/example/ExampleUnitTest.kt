@@ -3,6 +3,7 @@ package com.example
 import com.example.data.ble.BmsProtocolParser
 import com.example.data.ble.PowerMath
 import com.example.data.network.GitHubReleasesClient
+import com.example.data.prefs.TemperatureUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -173,5 +174,43 @@ class ExampleUnitTest {
 
         val parsed = GitHubReleasesClient.parseOwnerAndRepo("https://github.com/gianrufin/VoltCore/")
         assertEquals("gianrufin" to "VoltCore", parsed)
+    }
+
+    @Test
+    fun `pass through flow computes gross alternator input net pack flow and load out`() {
+        // Scenario 1: Car alternator puts +400W total while fridge uses 60W -> BMS net = +340W
+        val chargingWithLoad = PowerMath.computePassThroughFlow(
+            netPowerWatts = 340f,
+            activePluggedWatts = 60f,
+            chargeMosEnabled = true
+        )
+        assertTrue(chargingWithLoad.isPassThroughActive)
+        assertTrue(chargingWithLoad.isCharging)
+        assertEquals(400f, chargingWithLoad.grossInWatts, 0.1f)
+        assertEquals(340f, chargingWithLoad.netPackWatts, 0.1f)
+        assertEquals(60f, chargingWithLoad.loadOutWatts, 0.1f)
+
+        // Scenario 2: Float carry at 100% SoC -> BMS net ~0W while alternator powers 50W fridge
+        val floatCarry = PowerMath.computePassThroughFlow(
+            netPowerWatts = 0f,
+            activePluggedWatts = 50f,
+            chargeMosEnabled = true
+        )
+        assertTrue(floatCarry.isPassThroughActive)
+        assertTrue(floatCarry.isFloatCarryActive)
+        assertEquals(50f, floatCarry.grossInWatts, 0.1f)
+
+        // Scenario 3: Solo runtime for 60W fridge on 3584 Wh pack (50% = 1792 Wh)
+        val soloHours = PowerMath.computeDeviceSoloRuntimeHours(1792f, 60f)
+        assertNotNull(soloHours)
+        assertEquals(29.86f, soloHours!!, 0.05f)
+    }
+
+    @Test
+    fun `temperature conversion formats celsius and fahrenheit accurately`() {
+        assertEquals(32.0f, PowerMath.convertTemp(0f, TemperatureUnit.FAHRENHEIT), 0.01f)
+        assertEquals("0.0°C", PowerMath.formatTempWithUnit(0f, TemperatureUnit.CELSIUS))
+        assertEquals("32.0°F", PowerMath.formatTempWithUnit(0f, TemperatureUnit.FAHRENHEIT))
+        assertEquals("77°F", PowerMath.formatTempWithUnit(25f, TemperatureUnit.FAHRENHEIT, decimals = 0))
     }
 }

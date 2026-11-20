@@ -16,6 +16,16 @@ private val Context.voltCoreDataStore: DataStore<Preferences> by preferencesData
     name = "voltcore_preferences"
 )
 
+enum class DisplayDensity {
+    MINIMAL,
+    DETAILED
+}
+
+enum class TemperatureUnit {
+    CELSIUS,
+    FAHRENHEIT
+}
+
 data class AppSettings(
     val autoCalibrationEnabled: Boolean = true,
     val packCapacityWh: Float = 1024f,
@@ -29,6 +39,10 @@ data class AppSettings(
     val lowBatteryThresholdPercent: Int = 15,
     val highTempAlertEnabled: Boolean = true,
     val highTempThresholdCelsius: Float = 45f,
+    val coldChargeAlertEnabled: Boolean = true,
+    val coldChargeThresholdCelsius: Float = 0f,
+    val displayDensity: DisplayDensity = DisplayDensity.MINIMAL,
+    val temperatureUnit: TemperatureUnit = TemperatureUnit.CELSIUS,
     val lastDeviceAddress: String = "",
     val lastDeviceName: String = ""
 )
@@ -48,11 +62,22 @@ class AppPreferences(private val context: Context) {
         val LOW_BATTERY_THRESHOLD = intPreferencesKey("low_battery_threshold")
         val HIGH_TEMP_ALERT = booleanPreferencesKey("high_temp_alert")
         val HIGH_TEMP_THRESHOLD = floatPreferencesKey("high_temp_threshold")
+        val COLD_CHARGE_ALERT = booleanPreferencesKey("cold_charge_alert")
+        val COLD_CHARGE_THRESHOLD = floatPreferencesKey("cold_charge_threshold")
+        val DISPLAY_DENSITY = stringPreferencesKey("display_density")
+        val TEMPERATURE_UNIT = stringPreferencesKey("temperature_unit")
         val LAST_DEVICE_ADDRESS = stringPreferencesKey("last_device_address")
         val LAST_DEVICE_NAME = stringPreferencesKey("last_device_name")
     }
 
     val settingsFlow: Flow<AppSettings> = context.voltCoreDataStore.data.map { prefs ->
+        val density = prefs[Keys.DISPLAY_DENSITY]?.let {
+            runCatching { DisplayDensity.valueOf(it) }.getOrNull()
+        } ?: DisplayDensity.MINIMAL
+        val tempUnit = prefs[Keys.TEMPERATURE_UNIT]?.let {
+            runCatching { TemperatureUnit.valueOf(it) }.getOrNull()
+        } ?: TemperatureUnit.CELSIUS
+
         AppSettings(
             autoCalibrationEnabled = prefs[Keys.AUTO_CALIBRATION] ?: true,
             packCapacityWh = prefs[Keys.PACK_CAPACITY_WH] ?: 1024f,
@@ -66,6 +91,10 @@ class AppPreferences(private val context: Context) {
             lowBatteryThresholdPercent = prefs[Keys.LOW_BATTERY_THRESHOLD] ?: 15,
             highTempAlertEnabled = prefs[Keys.HIGH_TEMP_ALERT] ?: true,
             highTempThresholdCelsius = prefs[Keys.HIGH_TEMP_THRESHOLD] ?: 45f,
+            coldChargeAlertEnabled = prefs[Keys.COLD_CHARGE_ALERT] ?: true,
+            coldChargeThresholdCelsius = prefs[Keys.COLD_CHARGE_THRESHOLD] ?: 0f,
+            displayDensity = density,
+            temperatureUnit = tempUnit,
             lastDeviceAddress = prefs[Keys.LAST_DEVICE_ADDRESS] ?: "",
             lastDeviceName = prefs[Keys.LAST_DEVICE_NAME] ?: ""
         )
@@ -74,6 +103,18 @@ class AppPreferences(private val context: Context) {
     suspend fun setAutoCalibrationEnabled(enabled: Boolean) {
         context.voltCoreDataStore.edit { prefs ->
             prefs[Keys.AUTO_CALIBRATION] = enabled
+        }
+    }
+
+    suspend fun setDisplayDensity(density: DisplayDensity) {
+        context.voltCoreDataStore.edit { prefs ->
+            prefs[Keys.DISPLAY_DENSITY] = density.name
+        }
+    }
+
+    suspend fun setTemperatureUnit(unit: TemperatureUnit) {
+        context.voltCoreDataStore.edit { prefs ->
+            prefs[Keys.TEMPERATURE_UNIT] = unit.name
         }
     }
 
@@ -117,6 +158,13 @@ class AppPreferences(private val context: Context) {
         context.voltCoreDataStore.edit { prefs ->
             prefs[Keys.HIGH_TEMP_ALERT] = enabled
             prefs[Keys.HIGH_TEMP_THRESHOLD] = thresholdCelsius.coerceIn(30f, 80f)
+        }
+    }
+
+    suspend fun updateColdChargeAlert(enabled: Boolean, thresholdCelsius: Float) {
+        context.voltCoreDataStore.edit { prefs ->
+            prefs[Keys.COLD_CHARGE_ALERT] = enabled
+            prefs[Keys.COLD_CHARGE_THRESHOLD] = thresholdCelsius.coerceIn(-15f, 15f)
         }
     }
 

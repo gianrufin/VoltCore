@@ -5,12 +5,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.ble.BleConnectionStatus
 import com.example.data.ble.BleUiState
+import com.example.data.ble.PassThroughFlow
 import com.example.data.ble.PowerMath
 import com.example.data.local.AlertEventEntity
 import com.example.data.local.OutputPortType
 import com.example.data.local.PluggedDeviceEntity
 import com.example.data.local.TelemetrySnapshotEntity
 import com.example.data.prefs.AppSettings
+import com.example.data.prefs.DisplayDensity
+import com.example.data.prefs.TemperatureUnit
 import com.example.data.repository.BmsRepository
 import com.example.data.repository.UpdateCheckResult
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +40,7 @@ data class MonitorUiState(
     val packCapacityWh: Float = 1024f,
     val pluggedDevices: List<PluggedDeviceEntity> = emptyList(),
     val activePluggedWatts: Float = 0f,
+    val passThroughFlow: PassThroughFlow = PassThroughFlow(),
     val bleState: BleUiState = BleUiState(),
     val settings: AppSettings = AppSettings()
 )
@@ -45,7 +49,8 @@ data class DiagnosticsUiState(
     val recentSnapshots: List<TelemetrySnapshotEntity> = emptyList(),
     val latestSnapshot: TelemetrySnapshotEntity? = null,
     val alerts: List<AlertEventEntity> = emptyList(),
-    val isOfflineCached: Boolean = true
+    val isOfflineCached: Boolean = true,
+    val temperatureUnit: TemperatureUnit = TemperatureUnit.CELSIUS
 )
 
 data class SettingsUiState(
@@ -94,6 +99,14 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
             .sumOf { it.estimatedWatts.toDouble() }
             .toFloat()
 
+        val passThroughFlow = snapshot?.let {
+            PowerMath.computePassThroughFlow(
+                netPowerWatts = it.powerWatts,
+                activePluggedWatts = activeDeviceWatts,
+                chargeMosEnabled = it.chargeMosEnabled
+            )
+        } ?: PassThroughFlow(loadOutWatts = activeDeviceWatts)
+
         MonitorUiState(
             snapshot = snapshot,
             connectionMode = mode,
@@ -103,6 +116,7 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
             packCapacityWh = settings.packCapacityWh,
             pluggedDevices = devices,
             activePluggedWatts = activeDeviceWatts,
+            passThroughFlow = passThroughFlow,
             bleState = ble,
             settings = settings
         )
@@ -116,14 +130,16 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         repository.recentSnapshotsFlow,
         repository.latestSnapshotFlow,
         repository.alertEventsFlow,
-        repository.bleStateFlow
-    ) { snapshots, latest, alerts, ble ->
+        repository.bleStateFlow,
+        repository.settingsFlow
+    ) { snapshots, latest, alerts, ble, settings ->
         val offline = ble.status != BleConnectionStatus.CONNECTED
         DiagnosticsUiState(
             recentSnapshots = snapshots.reversed(),
             latestSnapshot = latest,
             alerts = alerts,
-            isOfflineCached = offline
+            isOfflineCached = offline,
+            temperatureUnit = settings.temperatureUnit
         )
     }.stateIn(
         scope = viewModelScope,
@@ -221,6 +237,18 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun setDisplayDensity(density: DisplayDensity) {
+        viewModelScope.launch {
+            repository.preferences.setDisplayDensity(density)
+        }
+    }
+
+    fun setTemperatureUnit(unit: TemperatureUnit) {
+        viewModelScope.launch {
+            repository.preferences.setTemperatureUnit(unit)
+        }
+    }
+
     fun savePackCalibration(capacityWh: Float, nominalVoltage: Float) {
         viewModelScope.launch {
             repository.preferences.updatePackCalibration(capacityWh, nominalVoltage)
@@ -242,6 +270,12 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
     fun updateHighTempAlert(enabled: Boolean, thresholdCelsius: Float) {
         viewModelScope.launch {
             repository.preferences.updateHighTempAlert(enabled, thresholdCelsius)
+        }
+    }
+
+    fun updateColdChargeAlert(enabled: Boolean, thresholdCelsius: Float) {
+        viewModelScope.launch {
+            repository.preferences.updateColdChargeAlert(enabled, thresholdCelsius)
         }
     }
 

@@ -29,6 +29,8 @@ import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +58,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.BuildConfig
 import com.example.R
+import com.example.data.ble.PowerMath
+import com.example.data.prefs.DisplayDensity
+import com.example.data.prefs.TemperatureUnit
 import com.example.data.repository.UpdateCheckResult
 import com.example.ui.SettingsUiState
 import com.example.ui.theme.AmberDim
@@ -75,11 +80,14 @@ import com.example.ui.theme.SlateMuted
 @Composable
 fun SettingsScreen(
     uiState: SettingsUiState,
+    onSelectDisplayDensity: (DisplayDensity) -> Unit,
+    onSelectTemperatureUnit: (TemperatureUnit) -> Unit,
     onToggleAutoCalibration: (Boolean) -> Unit,
     onSaveCalibration: (Float, Float) -> Unit,
     onUpdateChargeAlert: (Boolean, Int) -> Unit,
     onUpdateLowBatteryAlert: (Boolean, Int) -> Unit,
     onUpdateHighTempAlert: (Boolean, Float) -> Unit,
+    onUpdateColdChargeAlert: (Boolean, Float) -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onSendTestAlert: () -> Unit,
     onCheckForUpdates: (String) -> Unit,
@@ -137,6 +145,87 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.headlineLarge,
                     color = PureWhite
                 )
+            }
+
+            // Section 0: Display & Units
+            item {
+                Text(
+                    text = stringResource(R.string.section_display_units),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SlateMuted
+                )
+            }
+
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = CarbonSurface,
+                    border = BorderStroke(1.dp, HairlineBorder)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.label_display_density),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = PureWhite
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            SettingsOptionChip(
+                                label = stringResource(R.string.density_minimal),
+                                selected = uiState.settings.displayDensity == DisplayDensity.MINIMAL,
+                                onClick = { onSelectDisplayDensity(DisplayDensity.MINIMAL) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("density_minimal_button")
+                            )
+                            SettingsOptionChip(
+                                label = stringResource(R.string.density_detailed),
+                                selected = uiState.settings.displayDensity == DisplayDensity.DETAILED,
+                                onClick = { onSelectDisplayDensity(DisplayDensity.DETAILED) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("density_detailed_button")
+                            )
+                        }
+
+                        HorizontalDivider(color = HairlineBorder)
+
+                        Text(
+                            text = stringResource(R.string.label_temperature_unit),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = PureWhite
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            SettingsOptionChip(
+                                label = "Celsius (°C)",
+                                selected = uiState.settings.temperatureUnit == TemperatureUnit.CELSIUS,
+                                onClick = { onSelectTemperatureUnit(TemperatureUnit.CELSIUS) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("temp_unit_celsius_button")
+                            )
+                            SettingsOptionChip(
+                                label = "Fahrenheit (°F)",
+                                selected = uiState.settings.temperatureUnit == TemperatureUnit.FAHRENHEIT,
+                                onClick = { onSelectTemperatureUnit(TemperatureUnit.FAHRENHEIT) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("temp_unit_fahrenheit_button")
+                            )
+                        }
+                    }
+                }
             }
 
             // Section 1: In-App GitHub Releases APK Updater
@@ -398,7 +487,11 @@ fun SettingsScreen(
 
                         ThresholdSliderRow(
                             title = stringResource(R.string.label_high_temp_alert),
-                            valueLabel = "${uiState.settings.highTempThresholdCelsius.toInt()} °C",
+                            valueLabel = PowerMath.formatTempWithUnit(
+                                uiState.settings.highTempThresholdCelsius,
+                                uiState.settings.temperatureUnit,
+                                decimals = 0
+                            ),
                             checked = uiState.settings.highTempAlertEnabled,
                             value = uiState.settings.highTempThresholdCelsius,
                             valueRange = 35f..65f,
@@ -409,6 +502,27 @@ fun SettingsScreen(
                                 onUpdateHighTempAlert(uiState.settings.highTempAlertEnabled, threshold)
                             },
                             testTag = "switch_high_temp_alert"
+                        )
+
+                        HorizontalDivider(color = HairlineBorder)
+
+                        ThresholdSliderRow(
+                            title = stringResource(R.string.label_cold_charge_alert),
+                            valueLabel = PowerMath.formatTempWithUnit(
+                                uiState.settings.coldChargeThresholdCelsius,
+                                uiState.settings.temperatureUnit,
+                                decimals = 0
+                            ),
+                            checked = uiState.settings.coldChargeAlertEnabled,
+                            value = uiState.settings.coldChargeThresholdCelsius,
+                            valueRange = -10f..10f,
+                            onCheckedChange = { enabled ->
+                                onUpdateColdChargeAlert(enabled, uiState.settings.coldChargeThresholdCelsius)
+                            },
+                            onValueChange = { threshold ->
+                                onUpdateColdChargeAlert(uiState.settings.coldChargeAlertEnabled, threshold)
+                            },
+                            testTag = "switch_cold_charge_alert"
                         )
 
                         OutlinedButton(
@@ -713,4 +827,36 @@ private fun ThresholdSliderRow(
             )
         }
     }
+}
+
+@Composable
+private fun SettingsOptionChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge
+            )
+        },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = EmeraldDim,
+            selectedLabelColor = ElectricEmerald,
+            containerColor = CarbonElevated,
+            labelColor = SlateMuted
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = HairlineBorder,
+            selectedBorderColor = ElectricEmerald
+        ),
+        modifier = modifier
+    )
 }

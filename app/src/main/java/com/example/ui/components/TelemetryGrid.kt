@@ -28,7 +28,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.data.ble.PowerMath
 import com.example.data.local.TelemetrySnapshotEntity
+import com.example.data.prefs.TemperatureUnit
 import com.example.ui.theme.CarbonSurface
 import com.example.ui.theme.CautionAmber
 import com.example.ui.theme.CriticalCoral
@@ -43,9 +45,11 @@ import com.example.ui.theme.SlateMuted
 fun TelemetryGrid(
     snapshot: TelemetrySnapshotEntity,
     highTempThreshold: Float,
+    coldChargeThreshold: Float = 0f,
     packNominalVoltage: Float = 12.8f,
     packNominalAh: Float = 80f,
     detectedCellCount: Int = 0,
+    temperatureUnit: TemperatureUnit = TemperatureUnit.CELSIUS,
     modifier: Modifier = Modifier
 ) {
     val cells = snapshot.cellVoltagesList()
@@ -72,9 +76,14 @@ fun TelemetryGrid(
 
     val tempAccent = when {
         snapshot.temperatureCelsius >= highTempThreshold -> CriticalCoral
+        snapshot.isCharging && snapshot.temperatureCelsius <= coldChargeThreshold -> CautionAmber
         snapshot.temperatureCelsius >= highTempThreshold - 5f -> CautionAmber
         else -> ElectricEmerald
     }
+
+    val displayPackTemp = PowerMath.convertTemp(snapshot.temperatureCelsius, temperatureUnit)
+    val displayMosTemp = PowerMath.formatTempWithUnit(snapshot.mosfetTempCelsius, temperatureUnit)
+    val tempSymbol = PowerMath.tempUnitSymbol(temperatureUnit)
 
     val currentAccent = when {
         snapshot.currentAmps > 0.1f -> ElectricEmerald
@@ -124,9 +133,9 @@ fun TelemetryGrid(
         ) {
             MetricTile(
                 title = stringResource(R.string.metric_temperature),
-                value = "%.1f".format(snapshot.temperatureCelsius),
-                unit = "°C",
-                subtitle = "MOS ${"%.1f".format(snapshot.mosfetTempCelsius)}°C",
+                value = "%.1f".format(displayPackTemp),
+                unit = tempSymbol,
+                subtitle = "MOS $displayMosTemp",
                 icon = Icons.Rounded.Thermostat,
                 accentColor = tempAccent,
                 testTag = "metric_card_temperature",
