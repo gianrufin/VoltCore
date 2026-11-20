@@ -10,7 +10,7 @@
     <string name="action_connect_bms">Connect BMS</string>
     <string name="action_disconnect">Disconnect</string>
     <string name="status_live_ble">LIVE BLE</string>
-    <string name="status_simulated">SIMULATED PACK</string>
+    <string name="status_connecting">CONNECTING</string>
     <string name="status_offline_cached">OFFLINE CACHED</string>
     <string name="status_awaiting_connection">AWAITING PACK</string>
 
@@ -48,8 +48,7 @@
 
     <!-- Empty Monitor State -->
     <string name="empty_monitor_title">Connect Power Pack</string>
-    <string name="empty_monitor_body">Scan for a Bluetooth Smart BMS (JBD, JK, Daly) or start the Simulated Test Pack to stream live wattage, runtime ETA, and diagnostics.</string>
-    <string name="action_start_simulator">Launch Test Pack</string>
+    <string name="empty_monitor_body">Scan via Bluetooth Low Energy to connect to a Smart BMS (JBD, JK, Daly, Nordic UART) or BLE Battery Service power pack.</string>
 
     <!-- BLE Sheet -->
     <string name="ble_sheet_title">Smart BMS Connection</string>
@@ -58,16 +57,14 @@
     <string name="ble_stop_scan">Stop Scan</string>
     <string name="ble_permission_needed">Bluetooth permission is required to scan and read Smart BMS telemetry.</string>
     <string name="ble_grant_permission">Grant Bluetooth Access</string>
-    <string name="ble_no_hardware">Bluetooth LE is unavailable on this device. Use Offline Cached Mode or Simulated Test Pack below.</string>
-    <string name="ble_simulator_section">BENCH SIMULATOR</string>
-    <string name="ble_simulator_desc">Test charging/discharging curves, hours remaining math, and threshold alerts without physical hardware.</string>
+    <string name="ble_no_hardware">Bluetooth LE is unavailable on this device. Offline Cached Mode remains available for previously recorded packs.</string>
 
     <!-- Diagnostics Screen -->
     <string name="diagnostics_title">Diagnostics &amp; Cache</string>
     <string name="section_trend_history">OFFLINE CACHE TRENDS</string>
     <string name="section_cell_balance">CELL VOLTAGE BALANCE</string>
     <string name="section_alert_log">HEALTH &amp; ALERT LOG</string>
-    <string name="empty_diagnostics_history">No cached samples recorded yet. Connect a BMS or launch the Test Pack to populate offline telemetry.</string>
+    <string name="empty_diagnostics_history">No cached samples recorded yet. Connect a Smart BMS over Bluetooth to populate offline telemetry.</string>
     <string name="empty_alert_log">No battery health alerts triggered.</string>
 
     <!-- Settings Screen -->
@@ -84,7 +81,7 @@
     <string name="label_high_temp_alert">High Temperature Alert</string>
     <string name="section_github_updater">GITHUB APK UPDATER</string>
     <string name="label_github_repo">GitHub Repository (owner/repo)</string>
-    <string name="hint_github_repo">e.g. username/voltcore-bms</string>
+    <string name="hint_github_repo">e.g. gianrufin/VoltCore</string>
     <string name="action_check_updates">Check GitHub Releases</string>
     <string name="action_download_apk">Download &amp; Install APK</string>
     <string name="section_offline_storage">OFFLINE STORAGE</string>

@@ -54,7 +54,6 @@ import com.example.ui.components.BleConnectionSheet
 import com.example.ui.screens.DiagnosticsScreen
 import com.example.ui.screens.MonitorScreen
 import com.example.ui.screens.SettingsScreen
-import com.example.ui.theme.CarbonElevated
 import com.example.ui.theme.CarbonSurface
 import com.example.ui.theme.ElectricEmerald
 import com.example.ui.theme.EmeraldDim
@@ -244,8 +243,7 @@ fun VoltCoreApp(
                             MonitorScreen(
                                 uiState = monitorState,
                                 onOpenConnectionSheet = { viewModel.openConnectionSheet() },
-                                onStartSimulator = { viewModel.startSimulator() },
-                                onSelectSimulatorMode = { viewModel.setSimulatorMode(it) },
+                                onDisconnectBle = { viewModel.disconnectBle() },
                                 onSavePluggedDevice = { id, name, port, watts ->
                                     viewModel.savePluggedDevice(id, name, port, watts)
                                 },
@@ -294,22 +292,13 @@ fun VoltCoreApp(
     if (isSheetOpen) {
         BleConnectionSheet(
             bleState = monitorState.bleState,
-            simulatorState = monitorState.simulatorState,
             onRequestBlePermissions = {
                 blePermissionLauncher.launch(viewModel.requiredBlePermissions())
             },
             onStartScan = { viewModel.startBleScan() },
             onStopScan = { viewModel.stopBleScan() },
             onConnectDevice = { address, name -> viewModel.connectBleDevice(address, name) },
-            onDisconnect = { viewModel.disconnectSource() },
-            onToggleSimulator = {
-                if (monitorState.simulatorState.isActive) {
-                    viewModel.disconnectSource()
-                } else {
-                    viewModel.startSimulator()
-                    viewModel.closeConnectionSheet()
-                }
-            },
+            onDisconnect = { viewModel.disconnectBle() },
             onDismiss = { viewModel.closeConnectionSheet() }
         )
     }

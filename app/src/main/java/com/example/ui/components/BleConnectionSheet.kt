@@ -14,16 +14,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.BluetoothSearching
-import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -40,8 +40,6 @@ import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.ble.BleConnectionStatus
 import com.example.data.ble.BleUiState
-import com.example.data.ble.SimulatorMode
-import com.example.data.ble.SimulatorState
 import com.example.ui.theme.CarbonElevated
 import com.example.ui.theme.CarbonSurface
 import com.example.ui.theme.CriticalCoral
@@ -58,13 +56,11 @@ import com.example.ui.theme.SlateMuted
 @Composable
 fun BleConnectionSheet(
     bleState: BleUiState,
-    simulatorState: SimulatorState,
     onRequestBlePermissions: () -> Unit,
     onStartScan: () -> Unit,
     onStopScan: () -> Unit,
     onConnectDevice: (address: String, name: String) -> Unit,
     onDisconnect: () -> Unit,
-    onToggleSimulator: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -88,7 +84,12 @@ fun BleConnectionSheet(
                 color = PureWhite
             )
 
-            // Active BLE or Permission Controls
+            Text(
+                text = "Supports JBD / Xiaoxiang, JK BMS, Daly BMS, Nordic UART, and Standard BLE Battery Service (0x180F).",
+                style = MaterialTheme.typography.bodyMedium,
+                color = SlateMuted
+            )
+
             when {
                 !bleState.isHardwareAvailable -> {
                     Surface(
@@ -193,11 +194,26 @@ fun BleConnectionSheet(
                         )
                     }
 
-                    if (bleState.discoveredDevices.isNotEmpty()) {
+                    if (bleState.discoveredDevices.isEmpty() &&
+                        bleState.status != BleConnectionStatus.SCANNING
+                    ) {
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = CarbonElevated,
+                            border = BorderStroke(1.dp, HairlineBorder)
+                        ) {
+                            Text(
+                                text = "Tap Scan Nearby BMS while your power pack is powered on and within Bluetooth range.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = SlateMuted,
+                                modifier = Modifier.padding(14.dp)
+                            )
+                        }
+                    } else if (bleState.discoveredDevices.isNotEmpty()) {
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(180.dp),
+                                .height(260.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(bleState.discoveredDevices, key = { it.address }) { device ->
@@ -208,7 +224,10 @@ fun BleConnectionSheet(
                                         .testTag("ble_device_${device.address}"),
                                     shape = MaterialTheme.shapes.medium,
                                     color = CarbonElevated,
-                                    border = BorderStroke(1.dp, HairlineBorder)
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (device.isLikelyBms) ElectricEmerald else HairlineBorder
+                                    )
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -217,18 +236,43 @@ fun BleConnectionSheet(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Rounded.Bluetooth,
+                                            imageVector = if (device.isLikelyBms) {
+                                                Icons.Rounded.BatteryChargingFull
+                                            } else {
+                                                Icons.Rounded.Bluetooth
+                                            },
                                             contentDescription = null,
-                                            tint = PrecisionCyan,
+                                            tint = if (device.isLikelyBms) ElectricEmerald else PrecisionCyan,
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = device.name,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = PureWhite
-                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = device.name,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    color = PureWhite
+                                                )
+                                                if (device.isLikelyBms) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        color = EmeraldDim
+                                                    ) {
+                                                        Text(
+                                                            text = "BMS",
+                                                            style = MonoLabelSmall,
+                                                            color = ElectricEmerald,
+                                                            modifier = Modifier.padding(
+                                                                horizontal = 5.dp,
+                                                                vertical = 2.dp
+                                                            )
+                                                        )
+                                                    }
+                                                }
+                                            }
                                             Text(
                                                 text = device.address,
                                                 style = MonoLabelSmall,
@@ -251,75 +295,6 @@ fun BleConnectionSheet(
                                 }
                             }
                         }
-                    }
-                }
-            }
-
-            HorizontalDivider(color = HairlineBorder)
-
-            // Bench Simulator Section (clearly labeled)
-            Text(
-                text = stringResource(R.string.ble_simulator_section),
-                style = MaterialTheme.typography.labelSmall,
-                color = SlateMuted
-            )
-
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = if (simulatorState.isActive) EmeraldDim else CarbonElevated,
-                border = BorderStroke(
-                    1.dp,
-                    if (simulatorState.isActive) ElectricEmerald else HairlineBorder
-                )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Rounded.Science,
-                            contentDescription = null,
-                            tint = ElectricEmerald,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = if (simulatorState.isActive) {
-                                "Simulated Test Pack Active"
-                            } else {
-                                "Simulated Test Pack"
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                            color = PureWhite
-                        )
-                    }
-
-                    Text(
-                        text = stringResource(R.string.ble_simulator_desc),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = SlateMuted
-                    )
-
-                    Button(
-                        onClick = onToggleSimulator,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (simulatorState.isActive) CriticalCoral else ElectricEmerald,
-                            contentColor = OledBlack
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("toggle_simulator_button")
-                    ) {
-                        Text(
-                            text = if (simulatorState.isActive) {
-                                "Stop Test Pack"
-                            } else {
-                                stringResource(R.string.action_start_simulator)
-                            }
-                        )
                     }
                 }
             }

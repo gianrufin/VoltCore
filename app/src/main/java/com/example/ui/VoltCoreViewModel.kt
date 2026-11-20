@@ -6,8 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.ble.BleConnectionStatus
 import com.example.data.ble.BleUiState
 import com.example.data.ble.PowerMath
-import com.example.data.ble.SimulatorMode
-import com.example.data.ble.SimulatorState
 import com.example.data.local.AlertEventEntity
 import com.example.data.local.OutputPortType
 import com.example.data.local.PluggedDeviceEntity
@@ -25,8 +23,8 @@ import kotlinx.coroutines.launch
 
 enum class ConnectionMode {
     AWAITING,
+    CONNECTING,
     LIVE_BLE,
-    SIMULATED,
     OFFLINE_CACHED
 }
 
@@ -40,7 +38,6 @@ data class MonitorUiState(
     val pluggedDevices: List<PluggedDeviceEntity> = emptyList(),
     val activePluggedWatts: Float = 0f,
     val bleState: BleUiState = BleUiState(),
-    val simulatorState: SimulatorState = SimulatorState(),
     val settings: AppSettings = AppSettings()
 )
 
@@ -71,12 +68,11 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         repository.latestSnapshotFlow,
         repository.pluggedDevicesFlow,
         repository.bleStateFlow,
-        repository.simulatorStateFlow,
         repository.settingsFlow
-    ) { snapshot, devices, ble, sim, settings ->
+    ) { snapshot, devices, ble, settings ->
         val mode = when {
             ble.status == BleConnectionStatus.CONNECTED -> ConnectionMode.LIVE_BLE
-            sim.isActive -> ConnectionMode.SIMULATED
+            ble.status == BleConnectionStatus.CONNECTING -> ConnectionMode.CONNECTING
             snapshot != null -> ConnectionMode.OFFLINE_CACHED
             else -> ConnectionMode.AWAITING
         }
@@ -108,7 +104,6 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
             pluggedDevices = devices,
             activePluggedWatts = activeDeviceWatts,
             bleState = ble,
-            simulatorState = sim,
             settings = settings
         )
     }.stateIn(
@@ -121,12 +116,11 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         repository.recentSnapshotsFlow,
         repository.latestSnapshotFlow,
         repository.alertEventsFlow,
-        repository.bleStateFlow,
-        repository.simulatorStateFlow
-    ) { snapshots, latest, alerts, ble, sim ->
-        val offline = ble.status != BleConnectionStatus.CONNECTED && !sim.isActive
+        repository.bleStateFlow
+    ) { snapshots, latest, alerts, ble ->
+        val offline = ble.status != BleConnectionStatus.CONNECTED
         DiagnosticsUiState(
-            recentSnapshots = snapshots.reversed(), // chronological order for charts
+            recentSnapshots = snapshots.reversed(),
             latestSnapshot = latest,
             alerts = alerts,
             isOfflineCached = offline
@@ -185,32 +179,8 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         _isConnectionSheetOpen.value = false
     }
 
-    fun disconnectSource() {
-        repository.disconnectActiveSource()
-    }
-
-    fun startSimulator(mode: SimulatorMode = SimulatorMode.DISCHARGING) {
-        repository.startSimulatedPack(mode)
-    }
-
-    fun setSimulatorMode(mode: SimulatorMode) {
-        if (!repository.simulator.state.value.isActive) {
-            repository.startSimulatedPack(mode)
-        } else {
-            repository.simulator.setMode(mode)
-        }
-    }
-
-    fun setSimulatorChargerWatts(watts: Float) {
-        repository.simulator.setChargerWatts(watts)
-    }
-
-    fun setSimulatorLoadWatts(watts: Float) {
-        repository.simulator.setLoadWatts(watts)
-    }
-
-    fun setSimulatorSoc(soc: Float) {
-        repository.simulator.setSoc(soc)
+    fun disconnectBle() {
+        repository.disconnectBle()
     }
 
     fun savePluggedDevice(
@@ -272,12 +242,6 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
     fun sendTestNotification() {
         viewModelScope.launch {
             repository.notifier.sendTestAlert()
-        }
-    }
-
-    fun saveGithubRepoSlug(slug: String) {
-        viewModelScope.launch {
-            repository.preferences.updateGithubRepoSlug(slug)
         }
     }
 

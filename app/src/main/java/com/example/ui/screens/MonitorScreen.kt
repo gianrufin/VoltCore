@@ -23,10 +23,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.BluetoothConnected
+import androidx.compose.material.icons.rounded.BluetoothSearching
 import androidx.compose.material.icons.rounded.CloudOff
-import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -40,7 +41,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.R
-import com.example.data.ble.SimulatorMode
+import com.example.data.ble.BleConnectionStatus
+import com.example.data.ble.BleUiState
 import com.example.data.local.OutputPortType
 import com.example.data.local.PluggedDeviceEntity
 import com.example.ui.ConnectionMode
@@ -52,6 +54,9 @@ import com.example.ui.theme.AmberDim
 import com.example.ui.theme.CarbonElevated
 import com.example.ui.theme.CarbonSurface
 import com.example.ui.theme.CautionAmber
+import com.example.ui.theme.CoralDim
+import com.example.ui.theme.CyanDim
+import com.example.ui.theme.CriticalCoral
 import com.example.ui.theme.ElectricEmerald
 import com.example.ui.theme.EmeraldDim
 import com.example.ui.theme.HairlineBorder
@@ -66,8 +71,7 @@ import kotlin.math.abs
 fun MonitorScreen(
     uiState: MonitorUiState,
     onOpenConnectionSheet: () -> Unit,
-    onStartSimulator: () -> Unit,
-    onSelectSimulatorMode: (SimulatorMode) -> Unit,
+    onDisconnectBle: () -> Unit,
     onSavePluggedDevice: (Long, String, OutputPortType, Float) -> Unit,
     onTogglePluggedDevice: (PluggedDeviceEntity) -> Unit,
     onDeletePluggedDevice: (Long) -> Unit,
@@ -95,12 +99,27 @@ fun MonitorScreen(
                 )
             }
 
-            if (uiState.snapshot == null) {
+            // Show live BLE handshake / GATT inspector banner whenever connecting or connected without decoded frame yet
+            if (uiState.bleState.status == BleConnectionStatus.CONNECTING ||
+                (uiState.bleState.status == BleConnectionStatus.CONNECTED && uiState.snapshot == null) ||
+                uiState.bleState.errorMessage != null
+            ) {
                 item {
-                    EmptyAwaitingPackCard(
+                    LiveGattHandshakeCard(
+                        bleState = uiState.bleState,
                         onOpenConnectionSheet = onOpenConnectionSheet,
-                        onStartSimulator = onStartSimulator
+                        onDisconnectBle = onDisconnectBle
                     )
+                }
+            }
+
+            if (uiState.snapshot == null) {
+                if (uiState.bleState.status != BleConnectionStatus.CONNECTING &&
+                    uiState.bleState.status != BleConnectionStatus.CONNECTED
+                ) {
+                    item {
+                        EmptyAwaitingPackCard(onOpenConnectionSheet = onOpenConnectionSheet)
+                    }
                 }
             } else if (isWide) {
                 item {
@@ -111,12 +130,9 @@ fun MonitorScreen(
                     ) {
                         HeroPowerCard(
                             snapshot = uiState.snapshot,
-                            connectionMode = uiState.connectionMode,
                             formattedEta = uiState.formattedEta,
                             remainingWh = uiState.remainingWh,
                             packCapacityWh = uiState.packCapacityWh,
-                            simulatorState = uiState.simulatorState,
-                            onSelectSimulatorMode = onSelectSimulatorMode,
                             modifier = Modifier.weight(1f)
                         )
                         Column(
@@ -146,12 +162,9 @@ fun MonitorScreen(
                 item {
                     HeroPowerCard(
                         snapshot = uiState.snapshot,
-                        connectionMode = uiState.connectionMode,
                         formattedEta = uiState.formattedEta,
                         remainingWh = uiState.remainingWh,
-                        packCapacityWh = uiState.packCapacityWh,
-                        simulatorState = uiState.simulatorState,
-                        onSelectSimulatorMode = onSelectSimulatorMode
+                        packCapacityWh = uiState.packCapacityWh
                     )
                 }
 
@@ -192,12 +205,12 @@ private fun MonitorTopHeader(
         ConnectionMode.LIVE_BLE -> Triple(
             EmeraldDim,
             ElectricEmerald,
-            stringResource(R.string.status_live_ble)
+            uiState.bleState.detectedProtocol?.uppercase() ?: stringResource(R.string.status_live_ble)
         )
-        ConnectionMode.SIMULATED -> Triple(
-            EmeraldDim,
-            ElectricEmerald,
-            stringResource(R.string.status_simulated)
+        ConnectionMode.CONNECTING -> Triple(
+            CyanDim,
+            PrecisionCyan,
+            stringResource(R.string.status_connecting)
         )
         ConnectionMode.OFFLINE_CACHED -> {
             val ageMinutes = uiState.snapshot?.let {
@@ -267,14 +280,12 @@ private fun MonitorTopHeader(
                 Icon(
                     imageVector = when (uiState.connectionMode) {
                         ConnectionMode.LIVE_BLE -> Icons.Rounded.BluetoothConnected
-                        ConnectionMode.SIMULATED -> Icons.Rounded.Science
+                        ConnectionMode.CONNECTING -> Icons.Rounded.BluetoothSearching
                         ConnectionMode.OFFLINE_CACHED -> Icons.Rounded.CloudOff
                         ConnectionMode.AWAITING -> Icons.Rounded.Bluetooth
                     },
                     contentDescription = stringResource(R.string.action_connect_bms),
-                    tint = if (uiState.connectionMode == ConnectionMode.LIVE_BLE ||
-                        uiState.connectionMode == ConnectionMode.SIMULATED
-                    ) {
+                    tint = if (uiState.connectionMode == ConnectionMode.LIVE_BLE) {
                         ElectricEmerald
                     } else {
                         PrecisionCyan
@@ -283,10 +294,8 @@ private fun MonitorTopHeader(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (uiState.connectionMode == ConnectionMode.LIVE_BLE ||
-                        uiState.connectionMode == ConnectionMode.SIMULATED
-                    ) {
-                        "Source"
+                    text = if (uiState.connectionMode == ConnectionMode.LIVE_BLE) {
+                        "Connected"
                     } else {
                         stringResource(R.string.action_connect_bms)
                     },
@@ -299,9 +308,119 @@ private fun MonitorTopHeader(
 }
 
 @Composable
-private fun EmptyAwaitingPackCard(
+private fun LiveGattHandshakeCard(
+    bleState: BleUiState,
     onOpenConnectionSheet: () -> Unit,
-    onStartSimulator: () -> Unit
+    onDisconnectBle: () -> Unit
+) {
+    val hasError = bleState.errorMessage != null
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("live_gatt_handshake_card"),
+        shape = MaterialTheme.shapes.medium,
+        color = if (hasError) CoralDim else CarbonSurface,
+        border = BorderStroke(1.dp, if (hasError) CriticalCoral else PrecisionCyan)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    if (bleState.status == BleConnectionStatus.CONNECTING ||
+                        (bleState.status == BleConnectionStatus.CONNECTED && !hasError)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = PrecisionCyan
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                    }
+                    Column {
+                        Text(
+                            text = bleState.connectedDeviceName ?: "Bluetooth Power Pack",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = PureWhite
+                        )
+                        Text(
+                            text = bleState.errorMessage ?: bleState.handshakeStage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (hasError) CriticalCoral else PrecisionCyan
+                        )
+                    }
+                }
+            }
+
+            if (bleState.discoveredServicesSummary.isNotEmpty()) {
+                Text(
+                    text = "GATT SERVICES (${bleState.discoveredServicesSummary.size}) · PACKETS: ${bleState.packetsReceivedCount}",
+                    style = MonoLabelSmall,
+                    color = SlateMuted
+                )
+                Text(
+                    text = bleState.discoveredServicesSummary.joinToString("\n"),
+                    style = MonoLabelSmall,
+                    color = PureWhite
+                )
+            }
+
+            bleState.lastRawHex?.let { hex ->
+                Text(
+                    text = "LAST FRAME HEX: $hex",
+                    style = MonoLabelSmall,
+                    color = ElectricEmerald
+                )
+            }
+
+            if (bleState.packetsReceivedCount == 0 && bleState.discoveredServicesSummary.isNotEmpty()) {
+                Text(
+                    text = "Connected to power station GATT. If your unit uses an encrypted/proprietary brand protocol (e.g., newer EcoFlow/Bluetti BLE), standard Smart BMS UART frames may not be broadcast without brand pairing.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = SlateMuted
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onOpenConnectionSheet,
+                    border = BorderStroke(1.dp, HairlineBorder),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Switch Device", color = PureWhite)
+                }
+                if (bleState.status == BleConnectionStatus.CONNECTED ||
+                    bleState.status == BleConnectionStatus.CONNECTING
+                ) {
+                    OutlinedButton(
+                        onClick = onDisconnectBle,
+                        border = BorderStroke(1.dp, CriticalCoral),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.action_disconnect), color = CriticalCoral)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyAwaitingPackCard(
+    onOpenConnectionSheet: () -> Unit
 ) {
     Surface(
         modifier = Modifier
@@ -343,48 +462,23 @@ private fun EmptyAwaitingPackCard(
                 color = SlateMuted
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Button(
+                onClick = onOpenConnectionSheet,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ElectricEmerald,
+                    contentColor = OledBlack
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("empty_connect_ble_button")
             ) {
-                Button(
-                    onClick = onOpenConnectionSheet,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ElectricEmerald,
-                        contentColor = OledBlack
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("empty_connect_ble_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Bluetooth,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(stringResource(R.string.action_connect_bms))
-                }
-
-                OutlinedButton(
-                    onClick = onStartSimulator,
-                    border = BorderStroke(1.dp, HairlineBorder),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("empty_launch_simulator_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Science,
-                        contentDescription = null,
-                        tint = PrecisionCyan,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = stringResource(R.string.action_start_simulator),
-                        color = PureWhite
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Rounded.Bluetooth,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.action_connect_bms))
             }
         }
     }

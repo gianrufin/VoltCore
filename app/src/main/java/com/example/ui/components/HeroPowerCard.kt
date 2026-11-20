@@ -25,8 +25,6 @@ import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Power
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
@@ -47,10 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
-import com.example.data.ble.SimulatorMode
-import com.example.data.ble.SimulatorState
 import com.example.data.local.TelemetrySnapshotEntity
-import com.example.ui.ConnectionMode
 import com.example.ui.theme.AmberDim
 import com.example.ui.theme.CarbonElevated
 import com.example.ui.theme.CarbonSurface
@@ -72,12 +66,9 @@ import kotlin.math.abs
 @Composable
 fun HeroPowerCard(
     snapshot: TelemetrySnapshotEntity,
-    connectionMode: ConnectionMode,
     formattedEta: String,
     remainingWh: Float,
     packCapacityWh: Float,
-    simulatorState: SimulatorState,
-    onSelectSimulatorMode: (SimulatorMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isCharging = snapshot.isCharging
@@ -123,7 +114,6 @@ fun HeroPowerCard(
                 .padding(horizontal = 20.dp, vertical = 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Status & Pack Name Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -169,7 +159,6 @@ fun HeroPowerCard(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // EcoFlow-inspired Oversized Bold SoC Ring
             Box(
                 modifier = Modifier.size(216.dp),
                 contentAlignment = Alignment.Center
@@ -180,7 +169,6 @@ fun HeroPowerCard(
                     val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
                     val topLeft = Offset(pad, pad)
 
-                    // Subtle track arc (270-degree open instrument gauge)
                     drawArc(
                         color = CarbonElevated,
                         startAngle = 135f,
@@ -191,7 +179,6 @@ fun HeroPowerCard(
                         style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                     )
 
-                    // Active SoC arc
                     drawArc(
                         color = accentColor,
                         startAngle = 135f,
@@ -229,7 +216,6 @@ fun HeroPowerCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Dual KPI Bar: Live Wattage & Hours Remaining
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -312,49 +298,6 @@ fun HeroPowerCard(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.testTag("hero_eta_value")
                     )
-                }
-            }
-
-            // Quick Bench Controls when in Simulated Test Pack mode
-            if (connectionMode == ConnectionMode.SIMULATED && simulatorState.isActive) {
-                Spacer(modifier = Modifier.height(14.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val modes = listOf(
-                        SimulatorMode.DISCHARGING to "Discharge",
-                        SimulatorMode.CHARGING to "Charge",
-                        SimulatorMode.THERMAL_SPIKE to "Heat Test"
-                    )
-                    modes.forEach { (mode, label) ->
-                        val selected = simulatorState.mode == mode
-                        FilterChip(
-                            selected = selected,
-                            onClick = { onSelectSimulatorMode(mode) },
-                            label = {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = Color.Transparent,
-                                selectedContainerColor = EmeraldDim,
-                                selectedLabelColor = ElectricEmerald,
-                                labelColor = SlateMuted
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = selected,
-                                borderColor = HairlineBorder,
-                                selectedBorderColor = ElectricEmerald
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("sim_mode_${mode.name.lowercase()}")
-                        )
-                    }
                 }
             }
         }

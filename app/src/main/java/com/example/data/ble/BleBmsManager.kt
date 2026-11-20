@@ -17,6 +17,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,13 +32,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 
 data class DiscoveredBleDevice(
     val name: String,
     val address: String,
-    val rssi: Int
+    val rssi: Int,
+    val isLikelyBms: Boolean = false
 )
 
 enum class BleConnectionStatus {
@@ -48,6 +53,14 @@ enum class BleConnectionStatus {
     UNAVAILABLE
 }
 
+private enum class ActiveProtocol {
+    JBD,
+    JK,
+    DALY,
+    AUTO_PROBE,
+    STANDARD_BATTERY_ONLY
+}
+
 data class BleUiState(
     val isHardwareAvailable: Boolean = false,
     val isBluetoothEnabled: Boolean = false,
@@ -55,6 +68,11 @@ data class BleUiState(
     val status: BleConnectionStatus = BleConnectionStatus.DISCONNECTED,
     val connectedDeviceName: String? = null,
     val connectedDeviceAddress: String? = null,
+    val detectedProtocol: String? = null,
+    val handshakeStage: String = "Idle",
+    val discoveredServicesSummary: List<String> = emptyList(),
+    val lastRawHex: String? = null,
+    val packetsReceivedCount: Int = 0,
     val discoveredDevices: List<DiscoveredBleDevice> = emptyList(),
     val errorMessage: String? = null
 )
@@ -67,7 +85,7 @@ class BleBmsManager(private val context: Context) {
         private val JBD_NOTIFY_CHAR_UUID = UUID.fromString("0000ff01-0000-1000-8000-00805f9b34fb")
         private val JBD_WRITE_CHAR_UUID = UUID.fromString("0000ff02-0000-1000-8000-00805f9b34fb")
 
-        // JK BMS
+        // JK BMS / HM-10 serial
         private val JK_SERVICE_UUID = UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb")
         private val JK_CHAR_UUID = UUID.fromString("0000ffe1-0000-1000-8000-00805f9b34fb")
 
@@ -76,10 +94,22 @@ class BleBmsManager(private val context: Context) {
         private val DALY_NOTIFY_CHAR_UUID = UUID.fromString("0000fff1-0000-1000-8000-00805f9b34fb")
         private val DALY_WRITE_CHAR_UUID = UUID.fromString("0000fff2-0000-1000-8000-00805f9b34fb")
 
+        // Nordic UART Service (NUS) used by many power stations & ESP32 BMS bridges
+        private val NUS_SERVICE_UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
+        private val NUS_WRITE_CHAR_UUID = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e")
+        private val NUS_NOTIFY_CHAR_UUID = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e")
+
+        // Standard Bluetooth SIG Battery Service
+        private val BATTERY_SERVICE_UUID = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
+        private val BATTERY_LEVEL_CHAR_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
+
+        private val GENERIC_ACCESS_UUID = UUID.fromString("00001800-0000-1000-8000-00805f9b34fb")
+        private val GENERIC_ATTR_UUID = UUID.fromString("00001801-0000-1000-8000-00805f9b34fb")
         private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val gattMutex = Mutex()
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter?
@@ -88,15 +118,19 @@ class BleBmsManager(private val context: Context) {
     private val _state = MutableStateFlow(BleUiState())
     val state: StateFlow<BleUiState> = _state.asStateFlow()
 
-    private val _frames = MutableSharedFlow<Pair<String, ParsedBmsFrame>>(extraBufferCapacity = 16)
+    private val _frames = MutableSharedFlow<Pair<String, ParsedBmsFrame>>(extraBufferCapacity = 32)
     val frames: SharedFlow<Pair<String, ParsedBmsFrame>> = _frames.asSharedFlow()
 
     private var activeGatt: BluetoothGatt? = null
     private var writeCharacteristic: BluetoothGattCharacteristic? = null
+    private var activeProtocol: ActiveProtocol = ActiveProtocol.AUTO_PROBE
     private var pollJob: Job? = null
     private var scanJob: Job? = null
+
+    private var pendingOpDeferred: CompletableDeferred<Boolean>? = null
     private val rxBuffer = ByteArrayOutputStream()
     private var cachedCells: List<Float> = emptyList()
+    private var lastDalyFrame: ParsedBmsFrame? = null
 
     init {
         refreshEnvironmentState()
@@ -140,21 +174,42 @@ class BleBmsManager(private val context: Context) {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device ?: return
-            val name = if (hasRequiredPermissions()) {
-                device.name ?: result.scanRecord?.deviceName ?: "Smart BMS (${device.address.takeLast(5)})"
+            val rawName = if (hasRequiredPermissions()) {
+                device.name ?: result.scanRecord?.deviceName
             } else {
-                "Smart BMS"
+                null
             }
+            val displayName = rawName?.takeIf { it.isNotBlank() }
+                ?: "BLE Device (${device.address.takeLast(5)})"
+
+            val advertisedUuids = result.scanRecord?.serviceUuids?.map { it.uuid }.orEmpty()
+            val hasKnownBmsUuid = advertisedUuids.any {
+                it == JBD_SERVICE_UUID || it == JK_SERVICE_UUID ||
+                    it == DALY_SERVICE_UUID || it == NUS_SERVICE_UUID ||
+                    it == BATTERY_SERVICE_UUID
+            }
+            val lower = displayName.lowercase()
+            val nameLooksPower = listOf(
+                "bms", "jbd", "jk", "daly", "xiaoxiang", "power", "battery",
+                "ecoflow", "bluetti", "jackery", "ank", "lfp", "lifepo4", "pack", "ef-"
+            ).any { lower.contains(it) }
+
             val item = DiscoveredBleDevice(
-                name = name,
+                name = displayName,
                 address = device.address,
-                rssi = result.rssi
+                rssi = result.rssi,
+                isLikelyBms = hasKnownBmsUuid || nameLooksPower
             )
+
             _state.update { current ->
                 val updated = current.discoveredDevices
                     .filterNot { it.address == item.address }
                     .plus(item)
-                    .sortedByDescending { it.rssi }
+                    .sortedWith(
+                        compareByDescending<DiscoveredBleDevice> { it.isLikelyBms }
+                            .thenByDescending { it.name.startsWith("BLE Device").not() }
+                            .thenByDescending { it.rssi }
+                    )
                 current.copy(discoveredDevices = updated)
             }
         }
@@ -187,12 +242,11 @@ class BleBmsManager(private val context: Context) {
             return
         }
         if (!adapter.isEnabled) {
-            _state.update { it.copy(errorMessage = "Please turn on Bluetooth to scan for your BMS.") }
+            _state.update { it.copy(errorMessage = "Please turn on Bluetooth to scan for your power pack.") }
             return
         }
 
-        val scanner = adapter.bluetoothLeScanner
-        if (scanner == null) {
+        val scanner = adapter.bluetoothLeScanner ?: run {
             _state.update { it.copy(errorMessage = "BLE scanner unavailable.") }
             return
         }
@@ -212,7 +266,7 @@ class BleBmsManager(private val context: Context) {
 
         scanJob?.cancel()
         scanJob = scope.launch {
-            delay(12_000L)
+            delay(15_000L)
             stopScan()
         }
     }
@@ -250,11 +304,20 @@ class BleBmsManager(private val context: Context) {
         }
 
         disconnect()
+        lastDalyFrame = null
+        cachedCells = emptyList()
+        rxBuffer.reset()
+
         _state.update {
             it.copy(
                 status = BleConnectionStatus.CONNECTING,
                 connectedDeviceName = displayName,
                 connectedDeviceAddress = address,
+                detectedProtocol = null,
+                handshakeStage = "Connecting GATT…",
+                discoveredServicesSummary = emptyList(),
+                lastRawHex = null,
+                packetsReceivedCount = 0,
                 errorMessage = null
             )
         }
@@ -266,6 +329,8 @@ class BleBmsManager(private val context: Context) {
     fun disconnect() {
         pollJob?.cancel()
         pollJob = null
+        pendingOpDeferred?.complete(false)
+        pendingOpDeferred = null
         writeCharacteristic = null
         rxBuffer.reset()
         if (hasRequiredPermissions()) {
@@ -277,7 +342,12 @@ class BleBmsManager(private val context: Context) {
             current.copy(
                 status = if (current.isHardwareAvailable) BleConnectionStatus.DISCONNECTED else BleConnectionStatus.UNAVAILABLE,
                 connectedDeviceName = null,
-                connectedDeviceAddress = null
+                connectedDeviceAddress = null,
+                detectedProtocol = null,
+                handshakeStage = "Disconnected",
+                discoveredServicesSummary = emptyList(),
+                lastRawHex = null,
+                packetsReceivedCount = 0
             )
         }
     }
@@ -286,12 +356,22 @@ class BleBmsManager(private val context: Context) {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
-                _state.update { it.copy(status = BleConnectionStatus.CONNECTED, errorMessage = null) }
+                _state.update {
+                    it.copy(
+                        status = BleConnectionStatus.CONNECTED,
+                        handshakeStage = "Negotiating MTU & discovering services…",
+                        errorMessage = null
+                    )
+                }
                 if (hasRequiredPermissions()) {
-                    gatt.discoverServices()
+                    val mtuRequested = gatt.requestMtu(247)
+                    if (!mtuRequested) {
+                        gatt.discoverServices()
+                    }
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 pollJob?.cancel()
+                pendingOpDeferred?.complete(false)
                 if (hasRequiredPermissions()) {
                     gatt.close()
                 }
@@ -301,63 +381,93 @@ class BleBmsManager(private val context: Context) {
                         status = BleConnectionStatus.DISCONNECTED,
                         connectedDeviceName = null,
                         connectedDeviceAddress = null,
-                        errorMessage = if (status != BluetoothGatt.GATT_SUCCESS) "BLE disconnected (status $status)" else null
+                        handshakeStage = "Disconnected",
+                        errorMessage = if (status != BluetoothGatt.GATT_SUCCESS) {
+                            "BLE link closed (GATT status $status)"
+                        } else null
                     )
                 }
             }
         }
 
         @SuppressLint("MissingPermission")
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            if (hasRequiredPermissions()) {
+                gatt.discoverServices()
+            }
+        }
+
+        @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                _state.update { it.copy(errorMessage = "GATT service discovery failed ($status)") }
-                return
-            }
-
-            val jbdService = gatt.getService(JBD_SERVICE_UUID)
-            val jkService = gatt.getService(JK_SERVICE_UUID)
-            val dalyService = gatt.getService(DALY_SERVICE_UUID)
-
-            val (notifyChar, writeChar) = when {
-                jbdService != null -> Pair(
-                    jbdService.getCharacteristic(JBD_NOTIFY_CHAR_UUID),
-                    jbdService.getCharacteristic(JBD_WRITE_CHAR_UUID)
-                )
-                dalyService != null -> Pair(
-                    dalyService.getCharacteristic(DALY_NOTIFY_CHAR_UUID),
-                    dalyService.getCharacteristic(DALY_WRITE_CHAR_UUID)
-                )
-                jkService != null -> Pair(
-                    jkService.getCharacteristic(JK_CHAR_UUID),
-                    jkService.getCharacteristic(JK_CHAR_UUID)
-                )
-                else -> Pair(null, null)
-            }
-
-            if (notifyChar == null) {
                 _state.update {
-                    it.copy(errorMessage = "Unsupported GATT profile: Smart BMS service not found.")
+                    it.copy(
+                        handshakeStage = "Service discovery failed ($status)",
+                        errorMessage = "GATT service discovery failed ($status)"
+                    )
                 }
                 return
             }
 
-            writeCharacteristic = writeChar
-            if (hasRequiredPermissions()) {
-                gatt.setCharacteristicNotification(notifyChar, true)
-                val cccd = notifyChar.getDescriptor(CCCD_UUID)
-                if (cccd != null) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        gatt.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                        @Suppress("DEPRECATION")
-                        gatt.writeDescriptor(cccd)
-                    }
+            val summary = gatt.services.map { svc ->
+                val shortSvc = svc.uuid.toString().take(8)
+                val chars = svc.characteristics.joinToString(", ") { ch ->
+                    ch.uuid.toString().substring(4, 8).uppercase()
                 }
+                "0x$shortSvc [$chars]"
             }
 
-            startPolling(gatt)
+            _state.update {
+                it.copy(
+                    discoveredServicesSummary = summary,
+                    handshakeStage = "Subscribing to battery characteristics…"
+                )
+            }
+
+            scope.launch {
+                configureAndStartGattSession(gatt)
+            }
+        }
+
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int
+        ) {
+            pendingOpDeferred?.complete(status == BluetoothGatt.GATT_SUCCESS)
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+            pendingOpDeferred?.complete(status == BluetoothGatt.GATT_SUCCESS)
+        }
+
+        @Deprecated("Deprecated in API 33")
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                @Suppress("DEPRECATION")
+                characteristic.value?.let { handleIncomingBytes(characteristic.uuid, it) }
+            }
+            pendingOpDeferred?.complete(status == BluetoothGatt.GATT_SUCCESS)
+        }
+
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+            status: Int
+        ) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                handleIncomingBytes(characteristic.uuid, value)
+            }
+            pendingOpDeferred?.complete(status == BluetoothGatt.GATT_SUCCESS)
         }
 
         @Deprecated("Deprecated in API 33")
@@ -367,7 +477,7 @@ class BleBmsManager(private val context: Context) {
         ) {
             @Suppress("DEPRECATION")
             val value = characteristic.value ?: return
-            handleIncomingBytes(value)
+            handleIncomingBytes(characteristic.uuid, value)
         }
 
         override fun onCharacteristicChanged(
@@ -375,11 +485,208 @@ class BleBmsManager(private val context: Context) {
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            handleIncomingBytes(value)
+            handleIncomingBytes(characteristic.uuid, value)
         }
     }
 
     @SuppressLint("MissingPermission")
+    private suspend fun configureAndStartGattSession(gatt: BluetoothGatt) {
+        val jbdService = gatt.getService(JBD_SERVICE_UUID)
+        val jkService = gatt.getService(JK_SERVICE_UUID)
+        val dalyService = gatt.getService(DALY_SERVICE_UUID)
+        val nusService = gatt.getService(NUS_SERVICE_UUID)
+        val batteryService = gatt.getService(BATTERY_SERVICE_UUID)
+
+        val notifyChars = mutableListOf<BluetoothGattCharacteristic>()
+        var chosenWrite: BluetoothGattCharacteristic? = null
+
+        when {
+            jbdService != null -> {
+                activeProtocol = ActiveProtocol.JBD
+                jbdService.getCharacteristic(JBD_NOTIFY_CHAR_UUID)?.let { notifyChars.add(it) }
+                chosenWrite = jbdService.getCharacteristic(JBD_WRITE_CHAR_UUID)
+                _state.update { it.copy(detectedProtocol = "JBD / Xiaoxiang BMS") }
+            }
+            dalyService != null -> {
+                activeProtocol = ActiveProtocol.DALY
+                dalyService.getCharacteristic(DALY_NOTIFY_CHAR_UUID)?.let { notifyChars.add(it) }
+                chosenWrite = dalyService.getCharacteristic(DALY_WRITE_CHAR_UUID)
+                    ?: dalyService.getCharacteristic(DALY_NOTIFY_CHAR_UUID)
+                _state.update { it.copy(detectedProtocol = "Daly Smart BMS") }
+            }
+            jkService != null -> {
+                activeProtocol = ActiveProtocol.JK
+                jkService.getCharacteristic(JK_CHAR_UUID)?.let {
+                    notifyChars.add(it)
+                    chosenWrite = it
+                }
+                _state.update { it.copy(detectedProtocol = "JK Smart BMS") }
+            }
+            nusService != null -> {
+                activeProtocol = ActiveProtocol.AUTO_PROBE
+                nusService.getCharacteristic(NUS_NOTIFY_CHAR_UUID)?.let { notifyChars.add(it) }
+                chosenWrite = nusService.getCharacteristic(NUS_WRITE_CHAR_UUID)
+                _state.update { it.copy(detectedProtocol = "Nordic UART BMS Bridge") }
+            }
+            else -> {
+                // Scan all vendor services (excluding 1800/1801) for notify/indicate & write characteristics
+                val vendorServices = gatt.services.filter {
+                    it.uuid != GENERIC_ACCESS_UUID && it.uuid != GENERIC_ATTR_UUID
+                }
+                vendorServices.forEach { svc ->
+                    svc.characteristics.forEach { ch ->
+                        val props = ch.properties
+                        if ((props and BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0 ||
+                            (props and BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
+                        ) {
+                            notifyChars.add(ch)
+                        }
+                        if (chosenWrite == null &&
+                            ((props and BluetoothGattCharacteristic.PROPERTY_WRITE) != 0 ||
+                                (props and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0)
+                        ) {
+                            chosenWrite = ch
+                        }
+                    }
+                }
+                activeProtocol = if (chosenWrite != null) {
+                    ActiveProtocol.AUTO_PROBE
+                } else {
+                    ActiveProtocol.STANDARD_BATTERY_ONLY
+                }
+                _state.update {
+                    it.copy(
+                        detectedProtocol = if (chosenWrite != null) {
+                            "Custom GATT (Auto-Probing)"
+                        } else if (batteryService != null) {
+                            "Standard BLE Battery (0x180F)"
+                        } else {
+                            "Unknown Proprietary GATT"
+                        }
+                    )
+                }
+            }
+        }
+
+        // Always also include standard 0x2A19 Battery Level if present
+        val batteryLevelChar = batteryService?.getCharacteristic(BATTERY_LEVEL_CHAR_UUID)
+        if (batteryLevelChar != null && notifyChars.none { it.uuid == BATTERY_LEVEL_CHAR_UUID }) {
+            notifyChars.add(batteryLevelChar)
+        }
+
+        writeCharacteristic = chosenWrite
+
+        if (notifyChars.isEmpty() && chosenWrite == null && batteryLevelChar == null) {
+            _state.update {
+                it.copy(
+                    handshakeStage = "No readable or notifiable battery characteristics found.",
+                    errorMessage = "Device connected, but exposes no standard BLE Battery or Smart BMS UART characteristics."
+                )
+            }
+            return
+        }
+
+        // Sequentially enable notifications/indications (max 6 characteristics)
+        for (ch in notifyChars.take(6)) {
+            enableNotificationsSerialized(gatt, ch)
+        }
+
+        // Immediately read standard Battery Level if available
+        if (batteryLevelChar != null &&
+            (batteryLevelChar.properties and BluetoothGattCharacteristic.PROPERTY_READ) != 0
+        ) {
+            readCharacteristicSerialized(gatt, batteryLevelChar)
+        }
+
+        _state.update {
+            it.copy(handshakeStage = "Streaming telemetry requests…")
+        }
+
+        // For JK BMS, send activation command once first
+        if (activeProtocol == ActiveProtocol.JK && chosenWrite != null) {
+            writeCharacteristicSerialized(gatt, chosenWrite!!, BmsProtocolParser.JK_DEVICE_INFO_CMD)
+            delay(250L)
+        }
+
+        startPolling(gatt)
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun enableNotificationsSerialized(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic
+    ) = gattMutex.withLock {
+        if (!hasRequiredPermissions()) return@withLock
+        gatt.setCharacteristicNotification(characteristic, true)
+        val cccd = characteristic.getDescriptor(CCCD_UUID) ?: return@withLock
+        val props = characteristic.properties
+        val value = if ((props and BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0) {
+            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+        } else {
+            BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+        }
+        val deferred = CompletableDeferred<Boolean>()
+        pendingOpDeferred = deferred
+        val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            gatt.writeDescriptor(cccd, value) == android.bluetooth.BluetoothStatusCodes.SUCCESS
+        } else {
+            @Suppress("DEPRECATION")
+            cccd.value = value
+            @Suppress("DEPRECATION")
+            gatt.writeDescriptor(cccd)
+        }
+        if (started) {
+            withTimeoutOrNull(2000L) { deferred.await() }
+        }
+        pendingOpDeferred = null
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun readCharacteristicSerialized(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic
+    ) = gattMutex.withLock {
+        if (!hasRequiredPermissions()) return@withLock
+        val deferred = CompletableDeferred<Boolean>()
+        pendingOpDeferred = deferred
+        if (gatt.readCharacteristic(characteristic)) {
+            withTimeoutOrNull(2000L) { deferred.await() }
+        }
+        pendingOpDeferred = null
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun writeCharacteristicSerialized(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        payload: ByteArray
+    ) = gattMutex.withLock {
+        if (!hasRequiredPermissions()) return@withLock
+        val props = characteristic.properties
+        val writeType = if ((props and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0) {
+            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        } else {
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        }
+        val deferred = CompletableDeferred<Boolean>()
+        pendingOpDeferred = deferred
+        val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            gatt.writeCharacteristic(characteristic, payload, writeType) ==
+                android.bluetooth.BluetoothStatusCodes.SUCCESS
+        } else {
+            @Suppress("DEPRECATION")
+            characteristic.value = payload
+            @Suppress("DEPRECATION")
+            characteristic.writeType = writeType
+            @Suppress("DEPRECATION")
+            gatt.writeCharacteristic(characteristic)
+        }
+        if (started) {
+            withTimeoutOrNull(1500L) { deferred.await() }
+        }
+        pendingOpDeferred = null
+    }
+
     private fun startPolling(gatt: BluetoothGatt) {
         pollJob?.cancel()
         pollJob = scope.launch {
@@ -387,24 +694,40 @@ class BleBmsManager(private val context: Context) {
             while (isActive) {
                 val wc = writeCharacteristic
                 if (wc != null && hasRequiredPermissions()) {
-                    val cmd = if (tick % 3 == 0) {
-                        BmsProtocolParser.JBD_CELL_VOLTAGES_CMD
-                    } else {
-                        BmsProtocolParser.JBD_BASIC_INFO_CMD
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        gatt.writeCharacteristic(
-                            wc,
-                            cmd,
-                            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        wc.value = cmd
-                        @Suppress("DEPRECATION")
-                        wc.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                        @Suppress("DEPRECATION")
-                        gatt.writeCharacteristic(wc)
+                    when (activeProtocol) {
+                        ActiveProtocol.JBD -> {
+                            val cmd = if (tick % 3 == 0) {
+                                BmsProtocolParser.JBD_CELL_VOLTAGES_CMD
+                            } else {
+                                BmsProtocolParser.JBD_BASIC_INFO_CMD
+                            }
+                            writeCharacteristicSerialized(gatt, wc, cmd)
+                        }
+                        ActiveProtocol.DALY -> {
+                            val cmds = listOf(
+                                BmsProtocolParser.DALY_SOC_CMD,
+                                BmsProtocolParser.DALY_TEMP_CMD,
+                                BmsProtocolParser.DALY_MOS_CMD,
+                                BmsProtocolParser.DALY_STATUS_CMD
+                            )
+                            writeCharacteristicSerialized(gatt, wc, cmds[tick % cmds.size])
+                        }
+                        ActiveProtocol.JK -> {
+                            writeCharacteristicSerialized(gatt, wc, BmsProtocolParser.JK_CELL_INFO_CMD)
+                        }
+                        ActiveProtocol.AUTO_PROBE -> {
+                            val probes = listOf(
+                                BmsProtocolParser.JBD_BASIC_INFO_CMD,
+                                BmsProtocolParser.DALY_SOC_CMD,
+                                BmsProtocolParser.JK_CELL_INFO_CMD
+                            )
+                            writeCharacteristicSerialized(gatt, wc, probes[tick % probes.size])
+                        }
+                        ActiveProtocol.STANDARD_BATTERY_ONLY -> {
+                            gatt.getService(BATTERY_SERVICE_UUID)
+                                ?.getCharacteristic(BATTERY_LEVEL_CHAR_UUID)
+                                ?.let { readCharacteristicSerialized(gatt, it) }
+                        }
                     }
                 }
                 tick++
@@ -413,25 +736,78 @@ class BleBmsManager(private val context: Context) {
         }
     }
 
-    private fun handleIncomingBytes(bytes: ByteArray) {
+    private fun handleIncomingBytes(charUuid: UUID, bytes: ByteArray) {
         if (bytes.isEmpty()) return
 
-        // Daly single 13-byte packet check
-        if (bytes.size >= 13 && bytes[0] == 0xA5.toByte()) {
-            BmsProtocolParser.parseDalySocFrame(bytes)?.let { parsed ->
-                val name = _state.value.connectedDeviceName ?: "Daly Smart BMS"
-                _frames.tryEmit(name to parsed)
+        val hexPreview = bytes.take(24).joinToString(" ") { "%02X".format(it) }
+        _state.update {
+            it.copy(
+                lastRawHex = hexPreview,
+                packetsReceivedCount = it.packetsReceivedCount + 1
+            )
+        }
+
+        val deviceName = _state.value.connectedDeviceName ?: "Smart BMS"
+
+        // 1. Standard BLE Battery Level (0x2A19)
+        if (charUuid == BATTERY_LEVEL_CHAR_UUID) {
+            val soc = (bytes[0].toInt() and 0xFF).coerceIn(0, 100)
+            val fallbackFrame = ParsedBmsFrame(
+                socPercent = soc,
+                voltageVolts = 0f,
+                currentAmps = 0f,
+                temperatureCelsius = 25f,
+                mosfetTempCelsius = 25f,
+                cycleCount = 0,
+                stateOfHealthPercent = 100,
+                remainingCapacityAh = 0f,
+                nominalCapacityAh = 0f,
+                cellVoltages = emptyList(),
+                chargeMosEnabled = true,
+                dischargeMosEnabled = true,
+                protocolName = "Standard BLE Battery (0x180F)"
+            )
+            _state.update {
+                it.copy(
+                    detectedProtocol = fallbackFrame.protocolName,
+                    handshakeStage = "Receiving BLE Battery Level"
+                )
             }
+            _frames.tryEmit(deviceName to fallbackFrame)
             return
         }
 
-        // JBD multi-packet reassembly (starts with 0xDD, ends with 0x77)
-        if (bytes[0] == 0xDD.toByte()) {
+        // 2. Daly 13-byte frame
+        if (bytes.size >= 13 && bytes[0] == 0xA5.toByte()) {
+            BmsProtocolParser.parseDalyFrame(bytes, lastDalyFrame)?.let { parsed ->
+                lastDalyFrame = parsed
+                activeProtocol = ActiveProtocol.DALY
+                _state.update {
+                    it.copy(
+                        detectedProtocol = parsed.protocolName,
+                        handshakeStage = "Streaming live telemetry"
+                    )
+                }
+                _frames.tryEmit(deviceName to parsed)
+                return
+            }
+        }
+
+        // 3. Reassemble JBD (starts 0xDD, ends 0x77) or JK (starts 55 AA EB 90)
+        if (bytes[0] == 0xDD.toByte() ||
+            (bytes.size >= 4 &&
+                bytes[0] == 0x55.toByte() &&
+                bytes[1] == 0xAA.toByte() &&
+                bytes[2] == 0xEB.toByte() &&
+                bytes[3] == 0x90.toByte())
+        ) {
             rxBuffer.reset()
         }
         rxBuffer.write(bytes)
         val assembled = rxBuffer.toByteArray()
-        if (assembled.isNotEmpty() && assembled.last() == 0x77.toByte()) {
+
+        // Try JBD complete frame
+        if (assembled.isNotEmpty() && assembled[0] == 0xDD.toByte() && assembled.last() == 0x77.toByte()) {
             rxBuffer.reset()
             val cells = BmsProtocolParser.parseJbdCellVoltages(assembled)
             if (cells != null) {
@@ -439,9 +815,38 @@ class BleBmsManager(private val context: Context) {
                 return
             }
             BmsProtocolParser.parseJbdBasicInfo(assembled, cachedCells)?.let { parsed ->
-                val name = _state.value.connectedDeviceName ?: "Smart BMS"
-                _frames.tryEmit(name to parsed)
+                activeProtocol = ActiveProtocol.JBD
+                _state.update {
+                    it.copy(
+                        detectedProtocol = parsed.protocolName,
+                        handshakeStage = "Streaming live telemetry"
+                    )
+                }
+                _frames.tryEmit(deviceName to parsed)
             }
+            return
+        }
+
+        // Try JK complete frame (>= 190 bytes)
+        if (assembled.size >= 190 &&
+            assembled[0] == 0x55.toByte() &&
+            assembled[1] == 0xAA.toByte() &&
+            assembled[2] == 0xEB.toByte() &&
+            assembled[3] == 0x90.toByte()
+        ) {
+            rxBuffer.reset()
+            BmsProtocolParser.parseJkCellInfoFrame(assembled)?.let { parsed ->
+                activeProtocol = ActiveProtocol.JK
+                _state.update {
+                    it.copy(
+                        detectedProtocol = parsed.protocolName,
+                        handshakeStage = "Streaming live telemetry"
+                    )
+                }
+                _frames.tryEmit(deviceName to parsed)
+            }
+        } else if (assembled.size > 512) {
+            rxBuffer.reset()
         }
     }
 }

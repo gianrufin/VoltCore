@@ -3,12 +3,8 @@ package com.example.data.repository
 import android.content.Context
 import com.example.BuildConfig
 import com.example.data.ble.BleBmsManager
-import com.example.data.ble.BleConnectionStatus
 import com.example.data.ble.BleUiState
-import com.example.data.ble.BmsSimulator
 import com.example.data.ble.ParsedBmsFrame
-import com.example.data.ble.SimulatorMode
-import com.example.data.ble.SimulatorState
 import com.example.data.local.AlertEventEntity
 import com.example.data.local.BmsDao
 import com.example.data.local.PluggedDeviceEntity
@@ -48,7 +44,6 @@ class BmsRepository(context: Context) {
     private val dao: BmsDao = database.bmsDao()
     val preferences = AppPreferences(appContext)
     val bleManager = BleBmsManager(appContext)
-    val simulator = BmsSimulator()
     val notifier = BatteryAlertNotifier(appContext, dao)
 
     val latestSnapshotFlow: Flow<TelemetrySnapshotEntity?> = dao.observeLatestSnapshot()
@@ -57,7 +52,6 @@ class BmsRepository(context: Context) {
     val alertEventsFlow: Flow<List<AlertEventEntity>> = dao.observeAlertEvents()
     val settingsFlow: Flow<AppSettings> = preferences.settingsFlow
     val bleStateFlow: Flow<BleUiState> = bleManager.state
-    val simulatorStateFlow: Flow<SimulatorState> = simulator.state
 
     init {
         scope.launch {
@@ -71,33 +65,14 @@ class BmsRepository(context: Context) {
         }
     }
 
-    fun startSimulatedPack(mode: SimulatorMode = SimulatorMode.DISCHARGING) {
-        bleManager.disconnect()
-        simulator.start(mode) { frame ->
-            scope.launch {
-                persistAndEvaluateFrame(
-                    frame = frame,
-                    sourceType = "SIMULATED",
-                    deviceName = "VoltCore Test Pack"
-                )
-            }
-        }
-    }
-
-    fun stopSimulatedPack() {
-        simulator.stop()
-    }
-
     fun connectBleDevice(address: String, name: String) {
-        simulator.stop()
         scope.launch {
             preferences.saveLastConnectedDevice(address, name)
         }
         bleManager.connect(address, name)
     }
 
-    fun disconnectActiveSource() {
-        simulator.stop()
+    fun disconnectBle() {
         bleManager.disconnect()
     }
 
@@ -140,7 +115,6 @@ class BmsRepository(context: Context) {
         } else {
             dao.updatePluggedDevice(device)
         }
-        syncSimulatorLoadFromPluggedDevices()
     }
 
     suspend fun togglePluggedDevice(device: PluggedDeviceEntity) {
@@ -150,22 +124,10 @@ class BmsRepository(context: Context) {
                 updatedAtMs = System.currentTimeMillis()
             )
         )
-        syncSimulatorLoadFromPluggedDevices()
     }
 
     suspend fun deletePluggedDevice(id: Long) {
         dao.deletePluggedDeviceById(id)
-        syncSimulatorLoadFromPluggedDevices()
-    }
-
-    private suspend fun syncSimulatorLoadFromPluggedDevices() {
-        val activeLoad = dao.observePluggedDevices().first()
-            .filter { it.isActive }
-            .sumOf { it.estimatedWatts.toDouble() }
-            .toFloat()
-        if (activeLoad > 0f) {
-            simulator.setLoadWatts(activeLoad)
-        }
     }
 
     suspend fun clearOfflineHistory() {

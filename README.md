@@ -40,7 +40,7 @@
 - **EcoFlow-Style Hero Power Card**: Oversized bold SoC % ring with dynamic charging (emerald) and discharging (cyan) states, live input/output wattage, remaining Wh, and calculated **hours remaining to empty** or **hours remaining to 100% full**.
 - **Critical Battery Diagnostics**: Tabular monospace 2×2 telemetry grid for **Voltage (V)**, **Current (A)**, **Temperature (°C)**, and **Cycle Count** with State of Health (SoH %) and cell delta mV.
 - **Plugged Devices Monitor**: Track connected loads across `USB-C PD`, `AC Inverter`, `12V DC`, and `Anderson` ports with live allocation tracking.
-- **Multi-Protocol Smart BMS BLE + Test Pack Mode**: Real Bluetooth Low Energy GATT client for **JBD/Xiaoxiang**, **JK BMS**, and **Daly BMS**, paired with a toggleable **Simulated Test Pack** mode for bench testing without hardware.
+- **Multi-Protocol Smart BMS BLE**: Serialized Bluetooth Low Energy GATT client supporting **JBD/Xiaoxiang**, **JK BMS**, **Daly BMS**, **Nordic UART**, and **Standard BLE Battery Service (0x180F)** with live GATT service discovery diagnostics.
 - **Offline Room Cache & Trend Diagnostics**: Automatically caches telemetry in Room SQLite; switches seamlessly to **Offline Cached** mode when disconnected with Voltage, Current, and Temperature sparklines, 16S cell balance bars, and an alert log.
 - **Local Push Notifications**: Configurable alerts for **Charge Completion %**, **Low Battery %**, and **High Temperature °C** via Android `NotificationChannel`.
 
