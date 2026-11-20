@@ -28,6 +28,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Set up Android SDK & accept licenses
+        uses: android-actions/setup-android@v4
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -53,7 +56,19 @@ jobs:
             gradle :app:assembleRelease
             APK_SRC="app/build/outputs/apk/release/app-release.apk"
           else
-            base64 --decode debug.keystore.base64 > debug.keystore
+            if [[ -f debug.keystore.base64 ]]; then
+              base64 --decode debug.keystore.base64 > debug.keystore
+            elif [[ ! -f debug.keystore ]]; then
+              keytool -genkeypair -v \
+                -keystore debug.keystore \
+                -storepass android \
+                -alias androiddebugkey \
+                -keypass android \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
             gradle :app:assembleDebug
             APK_SRC="app/build/outputs/apk/debug/app-debug.apk"
           fi

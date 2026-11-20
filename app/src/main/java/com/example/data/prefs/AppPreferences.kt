@@ -19,7 +19,7 @@ private val Context.voltCoreDataStore: DataStore<Preferences> by preferencesData
 data class AppSettings(
     val packCapacityWh: Float = 1024f,
     val packNominalVoltage: Float = 51.2f,
-    val githubRepoSlug: String = "",
+    val githubRepoSlug: String = "gianrufin/VoltCore",
     val chargeCompleteAlertEnabled: Boolean = true,
     val chargeTargetPercent: Int = 100,
     val lowBatteryAlertEnabled: Boolean = true,
@@ -50,7 +50,7 @@ class AppPreferences(private val context: Context) {
         AppSettings(
             packCapacityWh = prefs[Keys.PACK_CAPACITY_WH] ?: 1024f,
             packNominalVoltage = prefs[Keys.PACK_NOMINAL_VOLTAGE] ?: 51.2f,
-            githubRepoSlug = prefs[Keys.GITHUB_REPO_SLUG] ?: "",
+            githubRepoSlug = prefs[Keys.GITHUB_REPO_SLUG] ?: "gianrufin/VoltCore",
             chargeCompleteAlertEnabled = prefs[Keys.CHARGE_COMPLETE_ALERT] ?: true,
             chargeTargetPercent = prefs[Keys.CHARGE_TARGET_PERCENT] ?: 100,
             lowBatteryAlertEnabled = prefs[Keys.LOW_BATTERY_ALERT] ?: true,
