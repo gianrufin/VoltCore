@@ -263,6 +263,10 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         repository.bleManager.stopScan()
     }
 
+    fun setBlePowerStationsOnly(enabled: Boolean) {
+        repository.bleManager.setFilterPowerStationsOnly(enabled)
+    }
+
     fun connectBleDevice(address: String, name: String) {
         autoOpenedForCurrentSession = false
         repository.connectBleDevice(address, name)

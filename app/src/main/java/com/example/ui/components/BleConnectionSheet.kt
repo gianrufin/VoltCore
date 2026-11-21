@@ -19,17 +19,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.BluetoothSearching
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -59,6 +64,7 @@ fun BleConnectionSheet(
     onRequestBlePermissions: () -> Unit,
     onStartScan: () -> Unit,
     onStopScan: () -> Unit,
+    onTogglePowerStationsOnly: (Boolean) -> Unit,
     onConnectDevice: (address: String, name: String) -> Unit,
     onDisconnect: () -> Unit,
     onDismiss: () -> Unit
@@ -85,7 +91,7 @@ fun BleConnectionSheet(
             )
 
             Text(
-                text = "Supports JBD / Xiaoxiang, JK BMS, Daly BMS, Nordic UART, and Standard BLE Battery Service (0x180F).",
+                text = "Automatically filters to battery power stations & Smart BMS (JBD, JK, Daly, EcoFlow, Bluetti, Jackery, Anker, LiFePO4).",
                 style = MaterialTheme.typography.bodyMedium,
                 color = SlateMuted
             )
@@ -186,11 +192,82 @@ fun BleConnectionSheet(
                         }
                     }
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FilterChip(
+                            selected = bleState.filterPowerStationsOnly,
+                            onClick = { onTogglePowerStationsOnly(true) },
+                            label = { Text(stringResource(R.string.ble_filter_stations_only)) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (bleState.filterPowerStationsOnly) {
+                                        Icons.Rounded.Check
+                                    } else {
+                                        Icons.Rounded.FilterList
+                                    },
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = EmeraldDim,
+                                selectedLabelColor = ElectricEmerald,
+                                selectedLeadingIconColor = ElectricEmerald,
+                                containerColor = CarbonElevated,
+                                labelColor = SlateMuted
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = bleState.filterPowerStationsOnly,
+                                borderColor = HairlineBorder,
+                                selectedBorderColor = ElectricEmerald
+                            ),
+                            modifier = Modifier.testTag("filter_stations_only_chip")
+                        )
+
+                        FilterChip(
+                            selected = !bleState.filterPowerStationsOnly,
+                            onClick = { onTogglePowerStationsOnly(false) },
+                            label = {
+                                val countSuffix = if (bleState.hiddenOtherDeviceCount > 0) {
+                                    " (+${bleState.hiddenOtherDeviceCount})"
+                                } else {
+                                    ""
+                                }
+                                Text(stringResource(R.string.ble_filter_all_devices) + countSuffix)
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = CarbonElevated,
+                                selectedLabelColor = PrecisionCyan,
+                                containerColor = CarbonElevated,
+                                labelColor = SlateMuted
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = !bleState.filterPowerStationsOnly,
+                                borderColor = HairlineBorder,
+                                selectedBorderColor = PrecisionCyan
+                            ),
+                            modifier = Modifier.testTag("filter_all_ble_chip")
+                        )
+                    }
+
                     bleState.errorMessage?.let { error ->
                         Text(
                             text = error,
                             style = MaterialTheme.typography.bodyMedium,
                             color = CriticalCoral
+                        )
+                    }
+
+                    if (bleState.filterPowerStationsOnly && bleState.hiddenOtherDeviceCount > 0) {
+                        Text(
+                            text = "Hiding ${bleState.hiddenOtherDeviceCount} non-power Bluetooth device(s) nearby.",
+                            style = MonoLabelSmall,
+                            color = SlateMuted
                         )
                     }
 
@@ -202,12 +279,31 @@ fun BleConnectionSheet(
                             color = CarbonElevated,
                             border = BorderStroke(1.dp, HairlineBorder)
                         ) {
-                            Text(
-                                text = "Tap Scan Nearby BMS while your power pack is powered on and within Bluetooth range.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = SlateMuted,
-                                modifier = Modifier.padding(14.dp)
-                            )
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = if (bleState.filterPowerStationsOnly && bleState.hiddenOtherDeviceCount > 0) {
+                                        "No battery power stations detected nearby (${bleState.hiddenOtherDeviceCount} unrelated Bluetooth devices hidden)."
+                                    } else {
+                                        "Tap Scan Power Stations while your unit is powered on and within Bluetooth range."
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = SlateMuted
+                                )
+                                if (bleState.filterPowerStationsOnly && bleState.hiddenOtherDeviceCount > 0) {
+                                    TextButton(
+                                        onClick = { onTogglePowerStationsOnly(false) },
+                                        modifier = Modifier.testTag("show_hidden_ble_button")
+                                    ) {
+                                        Text(
+                                            text = "Not listed? Show all ${bleState.hiddenOtherDeviceCount} BLE devices",
+                                            color = PrecisionCyan
+                                        )
+                                    }
+                                }
+                            }
                         }
                     } else if (bleState.discoveredDevices.isNotEmpty()) {
                         LazyColumn(
@@ -262,7 +358,7 @@ fun BleConnectionSheet(
                                                         color = EmeraldDim
                                                     ) {
                                                         Text(
-                                                            text = "BMS",
+                                                            text = device.badgeLabel ?: "BMS",
                                                             style = MonoLabelSmall,
                                                             color = ElectricEmerald,
                                                             modifier = Modifier.padding(

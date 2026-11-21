@@ -321,6 +321,7 @@ fun VoltCoreApp(
             },
             onStartScan = { viewModel.startBleScan() },
             onStopScan = { viewModel.stopBleScan() },
+            onTogglePowerStationsOnly = { enabled -> viewModel.setBlePowerStationsOnly(enabled) },
             onConnectDevice = { address, name -> viewModel.connectBleDevice(address, name) },
             onDisconnect = { viewModel.disconnectBle() },
             onDismiss = { viewModel.closeConnectionSheet() }

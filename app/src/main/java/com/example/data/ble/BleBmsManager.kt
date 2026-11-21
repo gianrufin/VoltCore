@@ -42,7 +42,8 @@ data class DiscoveredBleDevice(
     val name: String,
     val address: String,
     val rssi: Int,
-    val isLikelyBms: Boolean = false
+    val isLikelyBms: Boolean = false,
+    val badgeLabel: String? = null
 )
 
 enum class BleConnectionStatus {
@@ -74,6 +75,8 @@ data class BleUiState(
     val lastRawHex: String? = null,
     val packetsReceivedCount: Int = 0,
     val discoveredDevices: List<DiscoveredBleDevice> = emptyList(),
+    val filterPowerStationsOnly: Boolean = true,
+    val hiddenOtherDeviceCount: Int = 0,
     val errorMessage: String? = null
 )
 
@@ -131,6 +134,8 @@ class BleBmsManager(private val context: Context) {
     private val rxBuffer = ByteArrayOutputStream()
     private var cachedCells: List<Float> = emptyList()
     private var lastDalyFrame: ParsedBmsFrame? = null
+    private val scanResultsLock = Any()
+    private val rawScannedDevices = mutableMapOf<String, DiscoveredBleDevice>()
 
     init {
         refreshEnvironmentState()
@@ -183,34 +188,19 @@ class BleBmsManager(private val context: Context) {
                 ?: "BLE Device (${device.address.takeLast(5)})"
 
             val advertisedUuids = result.scanRecord?.serviceUuids?.map { it.uuid }.orEmpty()
-            val hasKnownBmsUuid = advertisedUuids.any {
-                it == JBD_SERVICE_UUID || it == JK_SERVICE_UUID ||
-                    it == DALY_SERVICE_UUID || it == NUS_SERVICE_UUID ||
-                    it == BATTERY_SERVICE_UUID
-            }
-            val lower = displayName.lowercase()
-            val nameLooksPower = listOf(
-                "bms", "jbd", "jk", "daly", "xiaoxiang", "power", "battery",
-                "ecoflow", "bluetti", "jackery", "ank", "lfp", "lifepo4", "pack", "ef-"
-            ).any { lower.contains(it) }
+            val classification = BlePowerStationFilter.classify(rawName, advertisedUuids)
 
             val item = DiscoveredBleDevice(
                 name = displayName,
                 address = device.address,
                 rssi = result.rssi,
-                isLikelyBms = hasKnownBmsUuid || nameLooksPower
+                isLikelyBms = classification.isPowerStation,
+                badgeLabel = classification.badgeLabel
             )
 
-            _state.update { current ->
-                val updated = current.discoveredDevices
-                    .filterNot { it.address == item.address }
-                    .plus(item)
-                    .sortedWith(
-                        compareByDescending<DiscoveredBleDevice> { it.isLikelyBms }
-                            .thenByDescending { it.name.startsWith("BLE Device").not() }
-                            .thenByDescending { it.rssi }
-                    )
-                current.copy(discoveredDevices = updated)
+            synchronized(scanResultsLock) {
+                rawScannedDevices[item.address] = item
+                publishFilteredDevicesLocked()
             }
         }
 
@@ -251,10 +241,15 @@ class BleBmsManager(private val context: Context) {
             return
         }
 
+        synchronized(scanResultsLock) {
+            rawScannedDevices.clear()
+        }
+
         _state.update {
             it.copy(
                 status = BleConnectionStatus.SCANNING,
                 discoveredDevices = emptyList(),
+                hiddenOtherDeviceCount = 0,
                 errorMessage = null
             )
         }
@@ -283,6 +278,32 @@ class BleBmsManager(private val context: Context) {
             } else {
                 current
             }
+        }
+    }
+
+    fun setFilterPowerStationsOnly(enabled: Boolean) {
+        synchronized(scanResultsLock) {
+            _state.update { it.copy(filterPowerStationsOnly = enabled) }
+            publishFilteredDevicesLocked()
+        }
+    }
+
+    private fun publishFilteredDevicesLocked() {
+        val all = rawScannedDevices.values.toList()
+        val stationOnly = _state.value.filterPowerStationsOnly
+        val hiddenCount = all.count { !it.isLikelyBms }
+        val visible = all
+            .let { list -> if (stationOnly) list.filter { it.isLikelyBms } else list }
+            .sortedWith(
+                compareByDescending<DiscoveredBleDevice> { it.isLikelyBms }
+                    .thenByDescending { !it.name.startsWith("BLE Device") }
+                    .thenByDescending { it.rssi }
+            )
+        _state.update { current ->
+            current.copy(
+                discoveredDevices = visible,
+                hiddenOtherDeviceCount = hiddenCount
+            )
         }
     }
 

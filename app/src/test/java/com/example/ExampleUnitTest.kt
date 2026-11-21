@@ -1,5 +1,6 @@
 package com.example
 
+import com.example.data.ble.BlePowerStationFilter
 import com.example.data.ble.BmsProtocolParser
 import com.example.data.ble.PowerMath
 import com.example.data.network.GitHubReleasesClient
@@ -9,6 +10,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.UUID
 
 class ExampleUnitTest {
 
@@ -244,5 +246,39 @@ class ExampleUnitTest {
             isCharging = false
         )
         assertEquals(8.03f, hours!!, 0.01f)
+    }
+
+    @Test
+    fun `ble filter matches battery power stations and bms while excluding random bluetooth devices`() {
+        // Real power stations & BMS names
+        assertTrue(BlePowerStationFilter.classify("EF-RIVER2-MAX", emptyList()).isPowerStation)
+        assertTrue(BlePowerStationFilter.classify("AC200M2234001", emptyList()).isPowerStation)
+        assertTrue(BlePowerStationFilter.classify("BLUETTI EB3A", emptyList()).isPowerStation)
+        assertTrue(BlePowerStationFilter.classify("Jackery Explorer 1000", emptyList()).isPowerStation)
+        assertTrue(BlePowerStationFilter.classify("Anker SOLIX C1000", emptyList()).isPowerStation)
+        assertTrue(BlePowerStationFilter.classify("JK-B2A20S20P", emptyList()).isPowerStation)
+        assertTrue(BlePowerStationFilter.classify("DL-4S100A", emptyList()).isPowerStation)
+        assertTrue(BlePowerStationFilter.classify("LiTime 12V100Ah", emptyList()).isPowerStation)
+        assertTrue(
+            BlePowerStationFilter.classify("CustomPack", listOf(BlePowerStationFilter.JBD_SERVICE_UUID)).isPowerStation
+        )
+        assertTrue(
+            BlePowerStationFilter.classify(null, listOf(BlePowerStationFilter.DALY_SERVICE_UUID)).isPowerStation
+        )
+
+        // Non-station Bluetooth clutter (including generic 0x180F Battery Service peripherals & nameless beacons)
+        assertFalse(BlePowerStationFilter.classify(null, emptyList()).isPowerStation)
+        assertFalse(BlePowerStationFilter.classify("", listOf(BlePowerStationFilter.BATTERY_SERVICE_UUID)).isPowerStation)
+        assertFalse(BlePowerStationFilter.classify(null, listOf(BlePowerStationFilter.JK_SERVICE_UUID)).isPowerStation)
+        assertFalse(
+            BlePowerStationFilter.classify("AirPods Pro", listOf(BlePowerStationFilter.BATTERY_SERVICE_UUID)).isPowerStation
+        )
+        assertFalse(
+            BlePowerStationFilter.classify("Keychron K2", listOf(BlePowerStationFilter.BATTERY_SERVICE_UUID)).isPowerStation
+        )
+        assertFalse(BlePowerStationFilter.classify("SamsungTV Q80", emptyList()).isPowerStation)
+        assertFalse(BlePowerStationFilter.classify("Galaxy Watch6", emptyList()).isPowerStation)
+        assertFalse(BlePowerStationFilter.classify("Blanket Heater", emptyList()).isPowerStation)
+        assertFalse(BlePowerStationFilter.classify("JBL Flip 6", listOf(UUID.randomUUID())).isPowerStation)
     }
 }

@@ -60,10 +60,12 @@
     <string name="empty_monitor_body">Scan via Bluetooth Low Energy to connect to a Smart BMS (JBD, JK, Daly, Nordic UART) or BLE Battery Service power pack.</string>
 
     <!-- BLE Sheet -->
-    <string name="ble_sheet_title">Smart BMS Connection</string>
-    <string name="ble_scanning">Scanning nearby BLE packs…</string>
-    <string name="ble_scan_again">Scan Nearby BMS</string>
+    <string name="ble_sheet_title">Power Station Bluetooth</string>
+    <string name="ble_scanning">Scanning for power stations &amp; Smart BMS…</string>
+    <string name="ble_scan_again">Scan Power Stations</string>
     <string name="ble_stop_scan">Stop Scan</string>
+    <string name="ble_filter_stations_only">Power Stations Only</string>
+    <string name="ble_filter_all_devices">Show All BLE</string>
     <string name="ble_permission_needed">Bluetooth permission is required to scan and read Smart BMS telemetry.</string>
     <string name="ble_grant_permission">Grant Bluetooth Access</string>
     <string name="ble_no_hardware">Bluetooth LE is unavailable on this device. Offline Cached Mode remains available for previously recorded packs.</string>
