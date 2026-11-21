@@ -99,7 +99,7 @@ fun HeroPowerCard(
 
     val accentColor by animateColorAsState(
         targetValue = when {
-            snapshot.socPercent <= 15 -> CriticalCoral
+            snapshot.exactSocPercent <= 15f -> CriticalCoral
             snapshot.temperatureCelsius >= 45f -> CautionAmber
             isCharging || passThroughFlow.isFloatCarryActive -> ElectricEmerald
             isStandby -> SlateMuted
@@ -109,7 +109,7 @@ fun HeroPowerCard(
     )
 
     val badgeContainerColor = when {
-        snapshot.socPercent <= 15 -> CoralDim
+        snapshot.exactSocPercent <= 15f -> CoralDim
         snapshot.temperatureCelsius >= 45f -> AmberDim
         isCharging || passThroughFlow.isFloatCarryActive -> EmeraldDim
         isStandby -> CarbonElevated
@@ -117,7 +117,7 @@ fun HeroPowerCard(
     }
 
     val animatedProgress by animateFloatAsState(
-        targetValue = (snapshot.socPercent / 100f).coerceIn(0f, 1f),
+        targetValue = (snapshot.exactSocPercent / 100f).coerceIn(0f, 1f),
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "socProgress"
     )
@@ -268,16 +268,18 @@ fun HeroPowerCard(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
-                            text = "${snapshot.socPercent}",
+                            text = "%.1f".format(snapshot.exactSocPercent),
                             style = HeroSocTextStyle,
                             color = PureWhite,
+                            maxLines = 1,
+                            softWrap = false,
                             modifier = Modifier.testTag("hero_soc_value")
                         )
                         Text(
                             text = "%",
                             style = MaterialTheme.typography.headlineMedium,
                             color = accentColor,
-                            modifier = Modifier.padding(bottom = 12.dp, start = 2.dp)
+                            modifier = Modifier.padding(bottom = 10.dp, start = 2.dp)
                         )
                     }
                     Text(

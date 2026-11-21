@@ -44,4 +44,16 @@ interface BmsDao {
 
     @Query("DELETE FROM alert_events")
     suspend fun clearAlerts()
+
+    @Query("SELECT * FROM saved_stations ORDER BY lastConnectedMs DESC")
+    fun observeSavedStations(): Flow<List<SavedStationEntity>>
+
+    @Query("SELECT * FROM saved_stations WHERE address = :address LIMIT 1")
+    suspend fun getSavedStation(address: String): SavedStationEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSavedStation(station: SavedStationEntity)
+
+    @Query("DELETE FROM saved_stations WHERE address = :address")
+    suspend fun deleteSavedStation(address: String)
 }

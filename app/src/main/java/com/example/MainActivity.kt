@@ -244,6 +244,14 @@ fun VoltCoreApp(
                                 uiState = monitorState,
                                 onOpenConnectionSheet = { viewModel.openConnectionSheet() },
                                 onDisconnectBle = { viewModel.disconnectBle() },
+                                onOpenDashboard = { viewModel.openStationDashboard() },
+                                onCloseDashboard = { viewModel.closeStationDashboard() },
+                                onConnectSavedStation = { station ->
+                                    viewModel.connectSavedStation(station)
+                                },
+                                onRemoveSavedStation = { address ->
+                                    viewModel.removeSavedStation(address)
+                                },
                                 onSavePluggedDevice = { id, name, port, watts ->
                                     viewModel.savePluggedDevice(id, name, port, watts)
                                 },

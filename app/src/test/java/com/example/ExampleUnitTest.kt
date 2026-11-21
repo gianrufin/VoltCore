@@ -213,4 +213,36 @@ class ExampleUnitTest {
         assertEquals("32.0°F", PowerMath.formatTempWithUnit(0f, TemperatureUnit.FAHRENHEIT))
         assertEquals("77°F", PowerMath.formatTempWithUnit(25f, TemperatureUnit.FAHRENHEIT, decimals = 0))
     }
+
+    @Test
+    fun `daly 0x90 and jbd resolve exact one-decimal socPercent accurately`() {
+        // Daly 0x90 encodes SoC in 0.1% increments: 803 = 80.3%, 906 = 90.6%
+        val soc803 = byteArrayOf(
+            0xA5.toByte(), 0x01, 0x90.toByte(), 0x08,
+            0x00, 0x84.toByte(), // 13.2V
+            0x00, 0x00,
+            0x75, 0x30, // 0.0A
+            0x03, 0x23, // 803 -> 80.3%
+            0x00
+        )
+        soc803[12] = ((0..11).sumOf { soc803[it].toInt() and 0xFF } and 0xFF).toByte()
+        val parsedDaly = BmsProtocolParser.parseDalyFrame(soc803)
+        assertNotNull(parsedDaly)
+        assertEquals(80.3f, parsedDaly!!.exactSocPercent, 0.01f)
+        assertEquals(80, parsedDaly.socPercent)
+
+        // JBD/JK exact SoC resolution from Ah ratio: 224.84 Ah / 280.0 Ah = 80.3%
+        assertEquals(80.3f, PowerMath.resolveExactSocPercent(80, 224.84f, 280f), 0.01f)
+        // Drift guard: if Ah/Nom deviates >1.5% from reported integer SoC, keep reported SoC
+        assertEquals(90.0f, PowerMath.resolveExactSocPercent(90, 200f, 280f), 0.01f)
+
+        // Fractional hours remaining respects 80.3% vs 80%
+        val hours = PowerMath.computeHoursRemaining(
+            socPercent = 80.3f,
+            powerWatts = -100f,
+            packCapacityWh = 1000f,
+            isCharging = false
+        )
+        assertEquals(8.03f, hours!!, 0.01f)
+    }
 }

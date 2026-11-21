@@ -10,6 +10,7 @@ import com.example.data.ble.PowerMath
 import com.example.data.local.AlertEventEntity
 import com.example.data.local.OutputPortType
 import com.example.data.local.PluggedDeviceEntity
+import com.example.data.local.SavedStationEntity
 import com.example.data.local.TelemetrySnapshotEntity
 import com.example.data.prefs.AppSettings
 import com.example.data.prefs.DisplayDensity
@@ -25,15 +26,16 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class ConnectionMode {
-    AWAITING,
+    DISCONNECTED,
     CONNECTING,
-    LIVE_BLE,
-    OFFLINE_CACHED
+    LIVE_BLE
 }
 
 data class MonitorUiState(
     val snapshot: TelemetrySnapshotEntity? = null,
-    val connectionMode: ConnectionMode = ConnectionMode.AWAITING,
+    val connectionMode: ConnectionMode = ConnectionMode.DISCONNECTED,
+    val savedStations: List<SavedStationEntity> = emptyList(),
+    val isDashboardOpen: Boolean = false,
     val hoursRemaining: Float? = null,
     val formattedEta: String = "--",
     val remainingWh: Float = 0f,
@@ -69,37 +71,78 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
     private val _isConnectionSheetOpen = MutableStateFlow(false)
     val isConnectionSheetOpen: StateFlow<Boolean> = _isConnectionSheetOpen.asStateFlow()
 
+    private val _isDashboardOpen = MutableStateFlow(false)
+    private var autoOpenedForCurrentSession = false
+
+    init {
+        viewModelScope.launch {
+            combine(
+                repository.bleStateFlow,
+                repository.liveSnapshotFlow
+            ) { ble, live -> ble.status to live }
+                .collect { (status, live) ->
+                    when (status) {
+                        BleConnectionStatus.CONNECTED -> {
+                            if (live != null && !autoOpenedForCurrentSession) {
+                                autoOpenedForCurrentSession = true
+                                _isDashboardOpen.value = true
+                            }
+                        }
+                        BleConnectionStatus.CONNECTING -> {
+                            autoOpenedForCurrentSession = false
+                        }
+                        BleConnectionStatus.DISCONNECTED,
+                        BleConnectionStatus.UNAVAILABLE,
+                        BleConnectionStatus.SCANNING -> {
+                            if (status != BleConnectionStatus.SCANNING) {
+                                autoOpenedForCurrentSession = false
+                                _isDashboardOpen.value = false
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    private val stationHubFlow = combine(
+        repository.savedStationsFlow,
+        _isDashboardOpen
+    ) { stations, dashboardOpen -> stations to dashboardOpen }
+
     val monitorUiState: StateFlow<MonitorUiState> = combine(
-        repository.latestSnapshotFlow,
+        repository.liveSnapshotFlow,
         repository.pluggedDevicesFlow,
         repository.bleStateFlow,
-        repository.settingsFlow
-    ) { snapshot, devices, ble, settings ->
+        repository.settingsFlow,
+        stationHubFlow
+    ) { liveSnapshot, devices, ble, settings, (stations, dashboardOpen) ->
+        val isLiveConnected = ble.status == BleConnectionStatus.CONNECTED
+        val activeSnapshot = if (isLiveConnected) liveSnapshot else null
+
         val mode = when {
-            ble.status == BleConnectionStatus.CONNECTED -> ConnectionMode.LIVE_BLE
+            isLiveConnected -> ConnectionMode.LIVE_BLE
             ble.status == BleConnectionStatus.CONNECTING -> ConnectionMode.CONNECTING
-            snapshot != null -> ConnectionMode.OFFLINE_CACHED
-            else -> ConnectionMode.AWAITING
+            else -> ConnectionMode.DISCONNECTED
         }
 
-        val hoursRemaining = snapshot?.let {
+        val hoursRemaining = activeSnapshot?.let {
             PowerMath.computeHoursRemaining(
-                socPercent = it.socPercent,
+                socPercent = it.exactSocPercent,
                 powerWatts = it.powerWatts,
                 packCapacityWh = settings.packCapacityWh,
                 isCharging = it.isCharging
             )
         }
 
-        val remainingWh = snapshot?.let {
-            (it.socPercent / 100f) * settings.packCapacityWh
+        val remainingWh = activeSnapshot?.let {
+            (it.exactSocPercent / 100f) * settings.packCapacityWh
         } ?: 0f
 
         val activeDeviceWatts = devices.filter { it.isActive }
             .sumOf { it.estimatedWatts.toDouble() }
             .toFloat()
 
-        val passThroughFlow = snapshot?.let {
+        val passThroughFlow = activeSnapshot?.let {
             PowerMath.computePassThroughFlow(
                 netPowerWatts = it.powerWatts,
                 activePluggedWatts = activeDeviceWatts,
@@ -108,8 +151,10 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         } ?: PassThroughFlow(loadOutWatts = activeDeviceWatts)
 
         MonitorUiState(
-            snapshot = snapshot,
+            snapshot = activeSnapshot,
             connectionMode = mode,
+            savedStations = stations,
+            isDashboardOpen = dashboardOpen && isLiveConnected && activeSnapshot != null,
             hoursRemaining = hoursRemaining,
             formattedEta = PowerMath.formatDurationHours(hoursRemaining),
             remainingWh = remainingWh,
@@ -175,6 +220,27 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         _isConnectionSheetOpen.value = false
     }
 
+    fun openStationDashboard() {
+        if (repository.bleManager.state.value.status == BleConnectionStatus.CONNECTED) {
+            _isDashboardOpen.value = true
+        }
+    }
+
+    fun closeStationDashboard() {
+        _isDashboardOpen.value = false
+    }
+
+    fun connectSavedStation(station: SavedStationEntity) {
+        autoOpenedForCurrentSession = false
+        repository.connectBleDevice(station.address, station.name)
+    }
+
+    fun removeSavedStation(address: String) {
+        viewModelScope.launch {
+            repository.removeSavedStation(address)
+        }
+    }
+
     fun requiredBlePermissions(): Array<String> = repository.bleManager.requiredPermissions()
 
     fun refreshPermissions() {
@@ -191,11 +257,14 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun connectBleDevice(address: String, name: String) {
+        autoOpenedForCurrentSession = false
         repository.connectBleDevice(address, name)
         _isConnectionSheetOpen.value = false
     }
 
     fun disconnectBle() {
+        autoOpenedForCurrentSession = false
+        _isDashboardOpen.value = false
         repository.disconnectBle()
     }
 

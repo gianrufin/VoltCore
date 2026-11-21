@@ -8,6 +8,7 @@ data class TelemetrySnapshotEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestampMs: Long,
     val socPercent: Int,
+    val exactSocPercent: Float = socPercent.toFloat(),
     val voltageVolts: Float,
     val currentAmps: Float,
     val powerWatts: Float,

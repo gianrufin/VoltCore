@@ -3,12 +3,14 @@ package com.example.data.repository
 import android.content.Context
 import com.example.BuildConfig
 import com.example.data.ble.BleBmsManager
+import com.example.data.ble.BleConnectionStatus
 import com.example.data.ble.BleUiState
 import com.example.data.ble.ParsedBmsFrame
 import com.example.data.ble.PowerMath
 import com.example.data.local.AlertEventEntity
 import com.example.data.local.BmsDao
 import com.example.data.local.PluggedDeviceEntity
+import com.example.data.local.SavedStationEntity
 import com.example.data.local.TelemetrySnapshotEntity
 import com.example.data.local.VoltCoreDatabase
 import com.example.data.network.GitHubReleasesClient
@@ -19,6 +21,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -48,10 +53,14 @@ class BmsRepository(context: Context) {
     val bleManager = BleBmsManager(appContext)
     val notifier = BatteryAlertNotifier(appContext, dao)
 
+    private val _liveSnapshot = MutableStateFlow<TelemetrySnapshotEntity?>(null)
+    val liveSnapshotFlow: StateFlow<TelemetrySnapshotEntity?> = _liveSnapshot.asStateFlow()
+
     val latestSnapshotFlow: Flow<TelemetrySnapshotEntity?> = dao.observeLatestSnapshot()
     val recentSnapshotsFlow: Flow<List<TelemetrySnapshotEntity>> = dao.observeRecentSnapshots(60)
     val pluggedDevicesFlow: Flow<List<PluggedDeviceEntity>> = dao.observePluggedDevices()
     val alertEventsFlow: Flow<List<AlertEventEntity>> = dao.observeAlertEvents()
+    val savedStationsFlow: Flow<List<SavedStationEntity>> = dao.observeSavedStations()
     val settingsFlow: Flow<AppSettings> = preferences.settingsFlow
     val bleStateFlow: Flow<BleUiState> = bleManager.state
 
@@ -62,28 +71,62 @@ class BmsRepository(context: Context) {
 
     init {
         scope.launch {
+            bleManager.state.collect { ble ->
+                if (ble.status == BleConnectionStatus.DISCONNECTED ||
+                    ble.status == BleConnectionStatus.UNAVAILABLE
+                ) {
+                    _liveSnapshot.value = null
+                }
+            }
+        }
+        scope.launch {
             bleManager.frames.collect { (deviceName, frame) ->
-                persistAndEvaluateFrame(
-                    frame = frame,
-                    sourceType = "BLE",
-                    deviceName = deviceName
-                )
+                if (bleManager.state.value.status == BleConnectionStatus.CONNECTED) {
+                    persistAndEvaluateFrame(
+                        frame = frame,
+                        sourceType = "BLE",
+                        deviceName = deviceName
+                    )
+                }
             }
         }
     }
 
     fun connectBleDevice(address: String, name: String) {
+        _liveSnapshot.value = null
         lastAcceptedCycleCount = null
         pendingCycleCandidate = null
         pendingCycleHits = 0
         scope.launch {
             preferences.saveLastConnectedDevice(address, name)
+            val existing = dao.getSavedStation(address)
+            val settings = preferences.settingsFlow.first()
+            dao.upsertSavedStation(
+                SavedStationEntity(
+                    address = address,
+                    name = name,
+                    protocolName = existing?.protocolName ?: "Smart BMS",
+                    nominalVoltage = existing?.nominalVoltage ?: settings.packNominalVoltage,
+                    nominalAh = existing?.nominalAh ?: settings.packNominalAh,
+                    capacityWh = existing?.capacityWh ?: settings.packCapacityWh,
+                    cellCount = existing?.cellCount ?: settings.detectedCellCount,
+                    lastConnectedMs = System.currentTimeMillis()
+                )
+            )
         }
         bleManager.connect(address, name)
     }
 
     fun disconnectBle() {
+        _liveSnapshot.value = null
         bleManager.disconnect()
+    }
+
+    suspend fun removeSavedStation(address: String) {
+        if (bleManager.state.value.connectedDeviceAddress == address) {
+            disconnectBle()
+        }
+        dao.deleteSavedStation(address)
     }
 
     private fun stabilizeCycleCount(rawCycles: Int): Int {
@@ -150,6 +193,7 @@ class BmsRepository(context: Context) {
         val snapshot = TelemetrySnapshotEntity(
             timestampMs = System.currentTimeMillis(),
             socPercent = frame.socPercent,
+            exactSocPercent = frame.exactSocPercent,
             voltageVolts = frame.voltageVolts,
             currentAmps = frame.currentAmps,
             powerWatts = powerWatts,
@@ -166,10 +210,27 @@ class BmsRepository(context: Context) {
             sourceType = sourceType,
             deviceName = deviceName
         )
+        if (bleManager.state.value.status == BleConnectionStatus.CONNECTED) {
+            _liveSnapshot.value = snapshot
+        }
         dao.insertSnapshot(snapshot)
         dao.pruneOldSnapshots()
 
         val updatedSettings = preferences.settingsFlow.first()
+        bleManager.state.value.connectedDeviceAddress?.takeIf { it.isNotBlank() }?.let { addr ->
+            dao.upsertSavedStation(
+                SavedStationEntity(
+                    address = addr,
+                    name = deviceName,
+                    protocolName = frame.protocolName,
+                    nominalVoltage = updatedSettings.packNominalVoltage,
+                    nominalAh = if (frame.nominalCapacityAh > 0f) frame.nominalCapacityAh else updatedSettings.packNominalAh,
+                    capacityWh = updatedSettings.packCapacityWh,
+                    cellCount = if (frame.cellCount > 0) frame.cellCount else updatedSettings.detectedCellCount,
+                    lastConnectedMs = snapshot.timestampMs
+                )
+            )
+        }
         notifier.evaluateAndNotify(snapshot, updatedSettings)
     }
 

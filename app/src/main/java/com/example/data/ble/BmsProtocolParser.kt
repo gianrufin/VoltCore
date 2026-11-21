@@ -6,6 +6,7 @@ import kotlin.math.roundToInt
 
 data class ParsedBmsFrame(
     val socPercent: Int,
+    val exactSocPercent: Float = socPercent.toFloat(),
     val voltageVolts: Float,
     val currentAmps: Float,
     val temperatureCelsius: Float,
@@ -47,17 +48,50 @@ object PowerMath {
         powerWatts: Float,
         packCapacityWh: Float,
         isCharging: Boolean
+    ): Float? = computeHoursRemaining(
+        socPercent = socPercent.toFloat(),
+        powerWatts = powerWatts,
+        packCapacityWh = packCapacityWh,
+        isCharging = isCharging
+    )
+
+    fun computeHoursRemaining(
+        socPercent: Float,
+        powerWatts: Float,
+        packCapacityWh: Float,
+        isCharging: Boolean
     ): Float? {
         val absWatts = abs(powerWatts)
         if (absWatts < 1.5f || packCapacityWh <= 0f) return null
 
+        val clampedSoc = socPercent.coerceIn(0f, 100f)
         return if (isCharging) {
-            val remainingPercent = (100 - socPercent.coerceIn(0, 100)) / 100f
+            val remainingPercent = (100f - clampedSoc) / 100f
             if (remainingPercent <= 0f) 0f else (remainingPercent * packCapacityWh) / absWatts
         } else {
-            val availablePercent = socPercent.coerceIn(0, 100) / 100f
+            val availablePercent = clampedSoc / 100f
             if (availablePercent <= 0f) 0f else (availablePercent * packCapacityWh) / absWatts
         }
+    }
+
+    /**
+     * Resolves 0.1%-precision SoC from Remaining Ah / Nominal Ah when it agrees within +-1.5%
+     * of the BMS-reported integer SoC byte; otherwise falls back cleanly to reported integer SoC.
+     */
+    fun resolveExactSocPercent(
+        reportedSoc: Int,
+        remainingAh: Float,
+        nominalAh: Float
+    ): Float {
+        val baseSoc = reportedSoc.coerceIn(0, 100).toFloat()
+        if (nominalAh >= 1f && remainingAh >= 0f) {
+            val derived = ((remainingAh / nominalAh) * 100f).coerceIn(0f, 100f)
+            val tenths = (derived * 10f).roundToInt() / 10f
+            if (abs(tenths - baseSoc) <= 1.5f) {
+                return tenths
+            }
+        }
+        return baseSoc
     }
 
     fun formatDurationHours(hours: Float?): String {
@@ -93,8 +127,8 @@ object PowerMath {
 
         val nominalAh = when {
             frame.nominalCapacityAh >= 2f -> frame.nominalCapacityAh
-            frame.remainingCapacityAh >= 1f && frame.socPercent >= 5 -> {
-                val est = frame.remainingCapacityAh / (frame.socPercent / 100f)
+            frame.remainingCapacityAh >= 1f && frame.exactSocPercent >= 5f -> {
+                val est = frame.remainingCapacityAh / (frame.exactSocPercent / 100f)
                 // Snap close to integer Ah when within 1.5% (e.g. 279.6 -> 280.0 Ah)
                 val rounded = est.roundToInt().toFloat()
                 if (abs(est - rounded) <= rounded * 0.015f) rounded else est
@@ -284,10 +318,12 @@ object BmsProtocolParser {
         val current = currentRaw / 100f
         val remainingAh = remainingCapRaw / 100f
         val nominalAh = nominalCapRaw / 100f
+        val exactSoc = PowerMath.resolveExactSocPercent(socPercent, remainingAh, nominalAh)
         val soh = (100 - (cycleCount / 40)).coerceIn(70, 100)
 
         return ParsedBmsFrame(
             socPercent = socPercent,
+            exactSocPercent = exactSoc,
             voltageVolts = voltage,
             currentAmps = current,
             temperatureCelsius = packTemp,
@@ -360,9 +396,12 @@ object BmsProtocolParser {
             0x90 -> {
                 val voltage = u16BE(frame[4], frame[5]) / 10f
                 val current = (u16BE(frame[8], frame[9]) - 30000) / 10f
-                val soc = (u16BE(frame[10], frame[11]) / 10f).toInt().coerceIn(0, 100)
+                val rawTenths = (u16BE(frame[10], frame[11]) / 10f).coerceIn(0f, 100f)
+                val exactSoc = (rawTenths * 10f).roundToInt() / 10f
+                val soc = exactSoc.roundToInt().coerceIn(0, 100)
                 val updated = base.copy(
                     socPercent = soc,
+                    exactSocPercent = exactSoc,
                     voltageVolts = voltage,
                     currentAmps = current,
                     protocolName = "Daly Smart BMS"
@@ -410,8 +449,8 @@ object BmsProtocolParser {
 
     private fun inferNominalForDaly(frame: ParsedBmsFrame): ParsedBmsFrame {
         if (frame.nominalCapacityAh >= 2f) return frame
-        if (frame.remainingCapacityAh >= 1f && frame.socPercent >= 5) {
-            val est = frame.remainingCapacityAh / (frame.socPercent / 100f)
+        if (frame.remainingCapacityAh >= 1f && frame.exactSocPercent >= 5f) {
+            val est = frame.remainingCapacityAh / (frame.exactSocPercent / 100f)
             val rounded = est.roundToInt().toFloat()
             val cleanNominal = if (abs(est - rounded) <= rounded * 0.015f) rounded else est
             return frame.copy(nominalCapacityAh = cleanNominal)
@@ -456,10 +495,12 @@ object BmsProtocolParser {
         val remAh = u32LE(frame, 174) / 1000f
         val nomAh = u32LE(frame, 178) / 1000f
         val cycles = u32LE(frame, 182).toInt().coerceAtLeast(0)
+        val exactSoc = PowerMath.resolveExactSocPercent(soc, remAh, nomAh)
         val soh = (100 - (cycles / 40)).coerceIn(70, 100)
 
         return ParsedBmsFrame(
             socPercent = soc,
+            exactSocPercent = exactSoc,
             voltageVolts = voltage,
             currentAmps = current,
             temperatureCelsius = temp1,
