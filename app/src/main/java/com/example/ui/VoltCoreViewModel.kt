@@ -15,6 +15,8 @@ import com.example.data.local.TelemetrySnapshotEntity
 import com.example.data.prefs.AppSettings
 import com.example.data.prefs.DisplayDensity
 import com.example.data.prefs.TemperatureUnit
+import com.example.data.network.ApkInstallState
+import com.example.data.network.ApkUpdateInstaller
 import com.example.data.repository.BmsRepository
 import com.example.data.repository.UpdateCheckResult
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,14 +60,17 @@ data class DiagnosticsUiState(
 data class SettingsUiState(
     val settings: AppSettings = AppSettings(),
     val updateCheckResult: UpdateCheckResult = UpdateCheckResult.Idle,
+    val apkInstallState: ApkInstallState = ApkInstallState.Idle,
     val hasNotificationPermission: Boolean = true,
     val cachedSampleCount: Int = 0
 )
 
 class VoltCoreViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = BmsRepository(application)
+    private val apkUpdateInstaller = ApkUpdateInstaller(application)
 
     private val _updateCheckResult = MutableStateFlow<UpdateCheckResult>(UpdateCheckResult.Idle)
+    private val _apkInstallState = MutableStateFlow<ApkInstallState>(ApkInstallState.Idle)
     private val _hasNotificationPermission =
         MutableStateFlow(repository.notifier.hasNotificationPermission())
     private val _isConnectionSheetOpen = MutableStateFlow(false)
@@ -195,12 +200,14 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
     val settingsUiState: StateFlow<SettingsUiState> = combine(
         repository.settingsFlow,
         _updateCheckResult,
+        _apkInstallState,
         _hasNotificationPermission,
         repository.recentSnapshotsFlow
-    ) { settings, updateResult, notifPerm, snapshots ->
+    ) { settings, updateResult, installState, notifPerm, snapshots ->
         SettingsUiState(
             settings = settings,
             updateCheckResult = updateResult,
+            apkInstallState = installState,
             hasNotificationPermission = notifPerm,
             cachedSampleCount = snapshots.size
         )
@@ -357,9 +364,58 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
     fun checkForUpdates(repoSlug: String) {
         viewModelScope.launch {
             repository.preferences.updateGithubRepoSlug(repoSlug)
+            _apkInstallState.value = ApkInstallState.Idle
             _updateCheckResult.value = UpdateCheckResult.Checking
             _updateCheckResult.value = repository.checkGitHubRelease(repoSlug)
         }
+    }
+
+    fun downloadAndInstallUpdate(downloadUrl: String) {
+        viewModelScope.launch {
+            _apkInstallState.value = ApkInstallState.Downloading(0)
+            val result = apkUpdateInstaller.downloadAndPrepareInstall(downloadUrl) { progress ->
+                _apkInstallState.value = ApkInstallState.Downloading(progress)
+            }
+            _apkInstallState.value = result
+            if (result is ApkInstallState.ReadyToInstall) {
+                if (!apkUpdateInstaller.launchApkInstaller(result.apkFile)) {
+                    _apkInstallState.value = ApkInstallState.Error(
+                        message = "Unable to open Android package installer.",
+                        fallbackUrl = downloadUrl
+                    )
+                }
+            }
+        }
+    }
+
+    fun retryPendingApkInstall() {
+        when (val state = _apkInstallState.value) {
+            is ApkInstallState.NeedsInstallPermission -> {
+                if (apkUpdateInstaller.canInstallPackages()) {
+                    _apkInstallState.value = ApkInstallState.ReadyToInstall(state.apkFile)
+                    apkUpdateInstaller.launchApkInstaller(state.apkFile)
+                } else {
+                    apkUpdateInstaller.launchInstallUnknownAppsSettings()
+                }
+            }
+            is ApkInstallState.ReadyToInstall -> {
+                if (apkUpdateInstaller.canInstallPackages()) {
+                    apkUpdateInstaller.launchApkInstaller(state.apkFile)
+                } else {
+                    _apkInstallState.value = ApkInstallState.NeedsInstallPermission(state.apkFile)
+                    apkUpdateInstaller.launchInstallUnknownAppsSettings()
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    fun openUnknownSourcesSettings() {
+        apkUpdateInstaller.launchInstallUnknownAppsSettings()
+    }
+
+    fun uninstallCurrentAppForCleanInstall() {
+        apkUpdateInstaller.launchUninstallFlow()
     }
 
     fun clearOfflineHistory() {

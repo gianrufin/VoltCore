@@ -300,6 +300,10 @@ fun VoltCoreApp(
                                 },
                                 onSendTestAlert = { viewModel.sendTestNotification() },
                                 onCheckForUpdates = { slug -> viewModel.checkForUpdates(slug) },
+                                onDownloadAndInstallApk = { url -> viewModel.downloadAndInstallUpdate(url) },
+                                onRetryPendingApkInstall = { viewModel.retryPendingApkInstall() },
+                                onOpenUnknownSourcesSettings = { viewModel.openUnknownSourcesSettings() },
+                                onUninstallForCleanInstall = { viewModel.uninstallCurrentAppForCleanInstall() },
                                 onClearCache = { viewModel.clearOfflineHistory() }
                             )
                         }

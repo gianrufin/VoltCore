@@ -12,52 +12,57 @@ val OutfitFontFamily = FontFamily(
     Font(R.font.outfit, FontWeight.Normal),
     Font(R.font.outfit, FontWeight.Medium),
     Font(R.font.outfit, FontWeight.SemiBold),
-    Font(R.font.outfit, FontWeight.Bold)
+    Font(R.font.outfit, FontWeight.Bold),
+    Font(R.font.outfit, FontWeight.ExtraBold),
+    Font(R.font.outfit, FontWeight.Black)
 )
 
 val ManropeFontFamily = FontFamily(
     Font(R.font.manrope, FontWeight.Normal),
     Font(R.font.manrope, FontWeight.Medium),
     Font(R.font.manrope, FontWeight.SemiBold),
-    Font(R.font.manrope, FontWeight.Bold)
+    Font(R.font.manrope, FontWeight.Bold),
+    Font(R.font.manrope, FontWeight.ExtraBold)
 )
 
 val IbmPlexMonoFontFamily = FontFamily(
     Font(R.font.ibm_plex_mono, FontWeight.Normal),
     Font(R.font.ibm_plex_mono, FontWeight.Medium),
-    Font(R.font.ibm_plex_mono, FontWeight.Bold)
+    Font(R.font.ibm_plex_mono, FontWeight.SemiBold),
+    Font(R.font.ibm_plex_mono, FontWeight.Bold),
+    Font(R.font.ibm_plex_mono, FontWeight.ExtraBold)
 )
 
 val HeroSocTextStyle = TextStyle(
     fontFamily = OutfitFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 54.sp,
-    lineHeight = 58.sp,
-    letterSpacing = (-1.5).sp,
+    fontWeight = FontWeight.Black,
+    fontSize = 56.sp,
+    lineHeight = 60.sp,
+    letterSpacing = (-1.6).sp,
     fontFeatureSettings = "tnum"
 )
 
 val MonoMetricLarge = TextStyle(
     fontFamily = IbmPlexMonoFontFamily,
-    fontWeight = FontWeight.Bold,
-    fontSize = 25.sp,
-    lineHeight = 31.sp,
-    letterSpacing = (-0.5).sp,
+    fontWeight = FontWeight.ExtraBold,
+    fontSize = 28.sp,
+    lineHeight = 33.sp,
+    letterSpacing = (-0.6).sp,
     fontFeatureSettings = "tnum"
 )
 
 val MonoMetricMedium = TextStyle(
     fontFamily = IbmPlexMonoFontFamily,
     fontWeight = FontWeight.Bold,
-    fontSize = 17.sp,
-    lineHeight = 22.sp,
-    letterSpacing = (-0.25).sp,
+    fontSize = 19.sp,
+    lineHeight = 24.sp,
+    letterSpacing = (-0.3).sp,
     fontFeatureSettings = "tnum"
 )
 
 val MonoLabelSmall = TextStyle(
     fontFamily = IbmPlexMonoFontFamily,
-    fontWeight = FontWeight.Medium,
+    fontWeight = FontWeight.SemiBold,
     fontSize = 12.sp,
     lineHeight = 16.sp,
     letterSpacing = 0.4.sp,
@@ -68,35 +73,35 @@ val VoltCoreTypography = Typography(
     displayLarge = HeroSocTextStyle,
     headlineLarge = TextStyle(
         fontFamily = OutfitFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 30.sp,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 31.sp,
         lineHeight = 36.sp,
-        letterSpacing = (-0.5).sp
+        letterSpacing = (-0.6).sp
     ),
     headlineMedium = TextStyle(
         fontFamily = OutfitFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 22.sp,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 23.sp,
         lineHeight = 28.sp,
-        letterSpacing = (-0.25).sp
+        letterSpacing = (-0.3).sp
     ),
     titleLarge = TextStyle(
         fontFamily = OutfitFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 18.sp,
+        fontWeight = FontWeight.Bold,
+        fontSize = 19.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.sp
     ),
     titleMedium = TextStyle(
         fontFamily = ManropeFontFamily,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 15.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp
     ),
     bodyLarge = TextStyle(
         fontFamily = ManropeFontFamily,
-        fontWeight = FontWeight.Normal,
+        fontWeight = FontWeight.Medium,
         fontSize = 15.sp,
         lineHeight = 22.sp,
         letterSpacing = 0.15.sp
@@ -110,14 +115,14 @@ val VoltCoreTypography = Typography(
     ),
     labelLarge = TextStyle(
         fontFamily = ManropeFontFamily,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.35.sp
     ),
     labelSmall = TextStyle(
         fontFamily = ManropeFontFamily,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 11.sp,
         lineHeight = 14.sp,
         letterSpacing = 0.85.sp

@@ -48,12 +48,22 @@ jobs:
       - name: Prepare signing keystore and build APK
         id: build
         run: |
+          RAW_TAG="${{ steps.tag.outputs.TAG }}"
+          CLEAN_VER="${RAW_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${CLEAN_VER%%-*}"
+          if [[ "$MAJOR" =~ ^[0-9]+$ && "$MINOR" =~ ^[0-9]+$ && "$PATCH" =~ ^[0-9]+$ ]]; then
+            VER_CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
+          else
+            VER_CODE=$(( 10000 + GITHUB_RUN_NUMBER ))
+          fi
+          echo "Building versionName=$CLEAN_VER versionCode=$VER_CODE"
+
           if [[ -n "${{ secrets.KEYSTORE_BASE64 }}" && -n "${{ secrets.STORE_PASSWORD }}" && -n "${{ secrets.KEY_PASSWORD }}" ]]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > my-upload-key.jks
             KEYSTORE_PATH="$(pwd)/my-upload-key.jks" \
             STORE_PASSWORD="${{ secrets.STORE_PASSWORD }}" \
             KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}" \
-            gradle :app:assembleRelease
+            gradle :app:assembleRelease -PVOLTCORE_VERSION_CODE="$VER_CODE" -PVOLTCORE_VERSION_NAME="$CLEAN_VER"
             APK_SRC="app/build/outputs/apk/release/app-release.apk"
           else
             if [[ -f debug.keystore.base64 ]]; then
@@ -69,7 +79,7 @@ jobs:
                 -validity 10000 \
                 -dname "CN=Android Debug,O=Android,C=US"
             fi
-            gradle :app:assembleDebug
+            gradle :app:assembleDebug -PVOLTCORE_VERSION_CODE="$VER_CODE" -PVOLTCORE_VERSION_NAME="$CLEAN_VER"
             APK_SRC="app/build/outputs/apk/debug/app-debug.apk"
           fi
 

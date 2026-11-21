@@ -16,8 +16,14 @@ android {
     applicationId = "com.aistudio.voltcore.bmsxkp"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0.0"
+    val propVersionCode = (project.findProperty("VOLTCORE_VERSION_CODE") as? String)?.toIntOrNull()
+      ?: System.getenv("VOLTCORE_VERSION_CODE")?.toIntOrNull()
+      ?: 2
+    val propVersionName = (project.findProperty("VOLTCORE_VERSION_NAME") as? String)?.takeIf { it.isNotBlank() }
+      ?: System.getenv("VOLTCORE_VERSION_NAME")?.takeIf { it.isNotBlank() }
+      ?: "1.1.0"
+    versionCode = propVersionCode
+    versionName = propVersionName
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

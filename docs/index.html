@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoltCore — Smart BMS &amp; Power Station Telemetry for Android</title>
+  <meta name="description" content="Real-time Bluetooth Smart BMS telemetry for LiFePO4 packs &amp; portable power stations. 0.1% SoC precision, pass-through alternator flow, animated liquid battery gauge, and multi-station hub." />
+  <meta name="theme-color" content="#050608" />
+
+  <!-- Open Graph / Facebook / Discord / LinkedIn Preview Thumbnail -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="VoltCore" />
+  <meta property="og:title" content="VoltCore — Smart BMS Power Cockpit for Android" />
+  <meta property="og:description" content="Monitor 0.1% SoC liquid battery state, simultaneous alternator charge + fridge load pass-through, cell balance, and sub-zero LiFePO4 protection over Bluetooth." />
+  <meta property="og:url" content="https://gianrufin.github.io/VoltCore/" />
+  <meta property="og:image" content="https://gianrufin.github.io/VoltCore/assets/og-preview.jpg" />
+  <meta property="og:image:secure_url" content="https://gianrufin.github.io/VoltCore/assets/og-preview.jpg" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:width" content="1280" />
+  <meta property="og:image:height" content="720" />
+  <meta property="og:image:alt" content="VoltCore Graphite Obsidian Smart BMS dashboard with animated MintVolt and Ice Blue liquid battery gauge" />
+
+  <!-- Twitter / X Large Summary Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="VoltCore — Smart BMS Power Cockpit for Android" />
+  <meta name="twitter:description" content="0.1% SoC precision, animated liquid battery gauge, pass-through alternator flow, and multi-station Bluetooth hub." />
+  <meta name="twitter:image" content="https://gianrufin.github.io/VoltCore/assets/og-preview.jpg" />
+
+  <link rel="icon" type="image/jpeg" href="assets/ai-juice-core.jpg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="config.js"></script>
+</head>
+<body>
+  <div class="ambient-glow ambient-mint" aria-hidden="true"></div>
+  <div class="ambient-glow ambient-ice" aria-hidden="true"></div>
+
+  <!-- Top Navigation -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#" class="brand" aria-label="VoltCore Home">
+        <span class="brand-dot"></span>
+        <span class="brand-name">VoltCore</span>
+        <span class="version-pill mono" id="nav-version-pill">v1.1.0</span>
+      </a>
+
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#live-demo">Live Gauge</a>
+        <a href="#screens">Screens</a>
+        <a href="#features">Capabilities</a>
+        <button type="button" class="nav-stats-btn" id="open-stats-btn">
+          <span class="pulse-mini"></span>
+          <span class="mono" id="nav-download-count">--</span> Downloads
+        </button>
+      </nav>
+
+      <a href="https://github.com/gianrufin/VoltCore/releases/latest/download/VoltCore-latest.apk"
+         class="btn btn-primary btn-sm track-apk-download"
+         id="nav-download-btn">
+        <span>Download APK</span>
+      </a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero Section -->
+    <section class="hero container">
+      <div class="hero-copy reveal">
+        <div class="eyebrow-pill mono">
+          <span class="dot-live"></span>
+          ANDROID SMART BMS COCKPIT · BLE 5.0
+        </div>
+        <h1>Every watt, every cell, <span class="text-gradient">at a glance.</span></h1>
+        <p class="hero-subtitle">
+          High-contrast telemetry built for off-grid LiFePO4 rigs, camper vans, and portable power stations. Monitor exact <strong>0.1% SoC</strong>, live alternator pass-through flow, and sub-zero cell protection with zero clutter.
+        </p>
+
+        <div class="hero-actions">
+          <a href="https://github.com/gianrufin/VoltCore/releases/latest/download/VoltCore-latest.apk"
+             class="btn btn-primary btn-lg track-apk-download"
+             id="hero-download-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div class="btn-label-stack">
+              <span class="btn-main-text">Download Latest APK</span>
+              <span class="btn-sub-text mono" id="hero-apk-meta">Loading release info…</span>
+            </div>
+          </a>
+
+          <a href="https://github.com/gianrufin/VoltCore/releases"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="btn btn-ghost btn-lg"
+             id="github-releases-link">
+            <span>All Releases</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 17L17 7M17 7H9M17 7v8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        </div>
+
+        <!-- Live Backend Analytics & GitHub Download Telemetry Strip -->
+        <div class="telemetry-strip">
+          <div class="telemetry-stat">
+            <span class="stat-label mono">TOTAL APK DOWNLOADS</span>
+            <span class="stat-value mono" id="hero-total-downloads">--</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="telemetry-stat">
+            <span class="stat-label mono">LATEST VERSION</span>
+            <span class="stat-value mono text-mint" id="hero-latest-tag">v1.1.0</span>
+          </div>
+          <div class="stat-divider"></div>
+          <button type="button" class="telemetry-stat stat-button" id="hero-stats-trigger">
+            <span class="stat-label mono">BACKEND ANALYTICS</span>
+            <span class="stat-value mono text-ice" id="ga-status-label">GA4 + Live API ↗</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Interactive Liquid Juice Battery Stage + Playful AI Energy Core -->
+      <div class="hero-stage reveal" id="live-demo">
+        <div class="juice-card">
+          <div class="juice-card-header">
+            <span class="mode-badge mono" id="demo-mode-badge">
+              <span class="badge-dot"></span>
+              <span id="demo-mode-label">CHARGING · PASS-THROUGH</span>
+            </span>
+            <span class="mono wh-counter" id="demo-wh-label">2878 / 3584 Wh</span>
+          </div>
+
+          <div class="liquid-ring-wrap">
+            <canvas id="hero-battery-canvas" width="290" height="290" aria-label="Interactive animated liquid battery percentage gauge"></canvas>
+            <div class="ring-overlay">
+              <div class="soc-readout">
+                <span class="soc-digits" id="demo-soc-value">80.3</span><span class="soc-pct" id="demo-soc-pct">%</span>
+              </div>
+              <div class="pack-name mono">RIG 280AH · LIFEPO4</div>
+              <div class="pack-spec mono" id="demo-pack-spec">4S · 280Ah · 12.8V</div>
+            </div>
+          </div>
+
+          <!-- Pass-Through Animated Strip -->
+          <div class="passthrough-mini" id="demo-passthrough">
+            <div>
+              <span class="mono tiny-label">GROSS IN</span>
+              <strong class="mono text-mint" id="demo-gross-in">+400 W</strong>
+            </div>
+            <div class="flow-dots" id="demo-flow-dots-in" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <div>
+              <span class="mono tiny-label">PACK NET</span>
+              <strong class="mono text-mint" id="demo-pack-net">+340 W</strong>
+            </div>
+            <div class="flow-dots ice" id="demo-flow-dots-out" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <div>
+              <span class="mono tiny-label">LOAD OUT</span>
+              <strong class="mono text-ice" id="demo-load-out">60 W</strong>
+            </div>
+          </div>
+
+          <!-- Interactive Controls -->
+          <div class="demo-controls">
+            <div class="slider-row">
+              <label for="soc-slider" class="mono tiny-label">PLAY WITH JUICE LEVEL</label>
+              <span class="mono tiny-label text-mint" id="demo-eta-readout">2h 05m to full</span>
+            </div>
+            <input type="range" id="soc-slider" min="5" max="100" step="0.1" value="80.3" aria-label="Adjust simulated battery percentage" />
+            <div class="mode-pills" role="group" aria-label="Power flow mode">
+              <button type="button" class="pill-btn active" data-mode="passthrough">Pass-Through</button>
+              <button type="button" class="pill-btn" data-mode="charging">Charging</button>
+              <button type="button" class="pill-btn" data-mode="discharging">Discharging</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Floating Generative AI Liquid Core Accent -->
+        <div class="ai-float-card" aria-hidden="true">
+          <img src="assets/ai-juice-core.jpg" alt="AI generated glowing LiFePO4 liquid cell core" loading="lazy" />
+          <div class="ai-float-caption">
+            <span class="mono">SMART CELL AI ART</span>
+            <strong>4S · 3584 Wh</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Generative AI Hardware Scene Showcase -->
+    <section class="container ai-scene-section reveal">
+      <div class="ai-scene-card">
+        <div class="ai-scene-media">
+          <img src="assets/hero-station.jpg" alt="Off-grid portable LiFePO4 power station with MintVolt and Ice Blue energy flow arcs" loading="lazy" />
+          <div class="scanline-overlay" aria-hidden="true"></div>
+        </div>
+        <div class="ai-scene-copy">
+          <span class="eyebrow-pill mono">BUILT FOR DRIVING &amp; OFF-GRID RIGS</span>
+          <h2>Simultaneous Alternator Charge &amp; Fridge Load Visibility</h2>
+          <p>
+            Single-shunt Smart BMS units normally hide how much your DC-DC alternator is really delivering when a 12V fridge or Starlink is running. VoltCore splits <strong>Gross In</strong>, <strong>Pack Net</strong>, and <strong>Load Out</strong> with unmistakable animated liquid waves and directional arc pulses.
+          </p>
+          <ul class="mini-check-list">
+            <li><span class="check-dot"></span>Auto-detects JBD, JK, Daly &amp; BLE Battery packs</li>
+            <li><span class="check-dot"></span>Automatic 4S/8S/16S Ah &amp; Wh calibration</li>
+            <li><span class="check-dot"></span>Cycle counter outlier spike guard (no random jumps)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- App Screenshots & Interactive Screen Samples -->
+    <section class="container screens-section reveal" id="screens">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow-pill mono">SCREENSHOTS &amp; INTERACTIVE SAMPLES</span>
+          <h2>Inside VoltCore v1.1</h2>
+        </div>
+        <div class="screen-tabs" role="tablist" aria-label="App screen samples">
+          <button type="button" class="screen-tab active" data-screen="cockpit" role="tab" aria-selected="true">Cockpit</button>
+          <button type="button" class="screen-tab" data-screen="hub" role="tab" aria-selected="false">Stations Hub</button>
+          <button type="button" class="screen-tab" data-screen="diagnostics" role="tab" aria-selected="false">Diagnostics</button>
+        </div>
+      </div>
+
+      <div class="screens-grid">
+        <!-- Sample 1: Live Liquid Cockpit -->
+        <article class="phone-frame screen-card active" data-screen-card="cockpit">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div class="app-bar">
+              <span class="app-pill mono">← Stations</span>
+              <span class="app-live mono">● DALY SMART BMS</span>
+            </div>
+            <div class="mock-hero-card">
+              <div class="mock-badge-row">
+                <span class="mini-badge mint mono">PASS-THROUGH</span>
+                <span class="mono muted-xs">2878 / 3584 Wh</span>
+              </div>
+              <div class="mock-ring-box">
+                <div class="mock-liquid-fill" style="--fill: 80.3%;"></div>
+                <div class="mock-ring-arc"></div>
+                <div class="mock-ring-center">
+                  <div class="mock-soc">80.3<span>%</span></div>
+                  <div class="mono muted-xs">VAN MAIN PACK</div>
+                  <div class="mono mint-xs">4S · 280Ah · 12.8V</div>
+                </div>
+              </div>
+              <div class="mock-metrics-row">
+                <div>
+                  <span class="mono muted-xs">INPUT</span>
+                  <strong class="mono">+340 W</strong>
+                </div>
+                <div class="v-rule"></div>
+                <div class="align-right">
+                  <span class="mono muted-xs">TO 100% FULL</span>
+                  <strong class="mono text-mint">2h 05m</strong>
+                </div>
+              </div>
+            </div>
+            <div class="mock-tile-grid">
+              <div class="mock-tile"><span class="mono muted-xs">VOLTAGE</span><strong class="mono">13.42 V</strong></div>
+              <div class="mock-tile"><span class="mono muted-xs">CURRENT</span><strong class="mono text-mint">+25.33 A</strong></div>
+              <div class="mock-tile"><span class="mono muted-xs">TEMP</span><strong class="mono">24.5 °C</strong></div>
+              <div class="mock-tile"><span class="mono muted-xs">CYCLES</span><strong class="mono">6 CYC</strong></div>
+            </div>
+          </div>
+          <p class="screen-caption"><strong>Live Unit Cockpit</strong> — Extra-bold 0.1% SoC, liquid wave gauge &amp; 2x2 diagnostics.</p>
+        </article>
+
+        <!-- Sample 2: Multi-Station Hub (Disconnected Safe) -->
+        <article class="phone-frame screen-card" data-screen-card="hub">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div class="app-bar">
+              <span class="app-brand">VoltCore</span>
+              <span class="app-pill mono">Connect BMS</span>
+            </div>
+            <div class="mono muted-xs section-lbl">SAVED POWER STATIONS · 2 UNITS</div>
+            <div class="mock-station-card live">
+              <div class="station-top">
+                <div>
+                  <strong>Camper 280Ah Pack</strong>
+                  <div class="mono muted-xs">4S · 280 Ah · 12.8 V · Daly</div>
+                </div>
+                <span class="mini-badge mint mono">LIVE</span>
+              </div>
+              <div class="station-live-bar">
+                <span class="mono text-mint"><strong>80.3%</strong></span>
+                <span class="mono text-ice">60 W</span>
+                <span class="mono">47h 58m</span>
+              </div>
+            </div>
+            <div class="mock-station-card">
+              <div class="station-top">
+                <div>
+                  <strong>Portable Fridge Pack</strong>
+                  <div class="mono muted-xs">4S · 100 Ah · 12.8 V · JBD</div>
+                </div>
+                <span class="mini-badge slate mono">Disconnected</span>
+              </div>
+              <div class="station-connect-btn mono">Connect via Bluetooth</div>
+            </div>
+            <div class="mock-add-station">
+              <span class="plus-circle">+</span>
+              <span>Add Power Station</span>
+            </div>
+          </div>
+          <p class="screen-caption"><strong>Multi-Station Hub</strong> — Zero stale watts shown when offline; add 2+ packs effortlessly.</p>
+        </article>
+
+        <!-- Sample 3: AI Visualized Diagnostics & Cell Balance -->
+        <article class="phone-frame screen-card" data-screen-card="diagnostics">
+          <div class="phone-notch"></div>
+          <div class="phone-screen image-screen">
+            <img src="assets/diagnostics-sample.jpg" alt="VoltCore live voltage, current sparklines and cell voltage balance diagnostics" loading="lazy" />
+          </div>
+          <p class="screen-caption"><strong>Diagnostics &amp; Cell Balance</strong> — Cached Room sparklines, mV delta &amp; sub-zero alerts.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Core Capabilities Bento Grid -->
+    <section class="container features-section reveal" id="features">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow-pill mono">ENGINEERED FOR RELIABILITY</span>
+          <h2>Precision Hardware Telemetry</h2>
+        </div>
+      </div>
+
+      <div class="bento-grid">
+        <div class="bento-card">
+          <div class="bento-icon mint">0.1%</div>
+          <h3>Tenths-Precision SoC</h3>
+          <p>Decodes native 0.1% Daly registers and Ah-calibrated JBD/JK ratios (`80.3%`, `90.6%`) with zero rounding surprises.</p>
+        </div>
+        <div class="bento-card">
+          <div class="bento-icon ice">⇄</div>
+          <h3>Pass-Through Energy Flow</h3>
+          <p>Combine plugged load estimates with net BMS current to view live Gross Alternator In, Pack Net, and Load Out watts.</p>
+        </div>
+        <div class="bento-card">
+          <div class="bento-icon amber">❄</div>
+          <h3>Sub-Zero LiFePO4 Guard</h3>
+          <p>Triggers instant warning alerts whenever charging current enters below 0 °C (32 °F) to safeguard lithium plating.</p>
+        </div>
+        <div class="bento-card">
+          <div class="bento-icon mint">↻</div>
+          <h3>Verified In-App Updater</h3>
+          <p>Streams GitHub Release APKs directly inside Settings with progress tracking, signature verification, and `FileProvider` install.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom CTA + Social Share Strip -->
+    <section class="container cta-banner reveal">
+      <div class="cta-content">
+        <h2>Ready to monitor your pack?</h2>
+        <p>Install VoltCore directly on Android 7.0+ and connect to your Smart BMS in seconds.</p>
+      </div>
+      <div class="cta-actions">
+        <a href="https://github.com/gianrufin/VoltCore/releases/latest/download/VoltCore-latest.apk"
+           class="btn btn-primary btn-lg track-apk-download"
+           id="footer-download-btn">
+          Download Latest APK
+        </a>
+        <button type="button" class="btn btn-ghost btn-lg" id="share-link-btn">
+          Share Page Link
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer container">
+    <div class="footer-left">
+      <span class="brand-name">VoltCore</span>
+      <span class="muted">· Open-source Android Smart BMS telemetry ·</span>
+      <a href="https://github.com/gianrufin/VoltCore" target="_blank" rel="noopener noreferrer">gianrufin/VoltCore</a>
+    </div>
+    <div class="footer-right mono">
+      <span id="toast-area" role="status" aria-live="polite"></span>
+    </div>
+  </footer>
+
+  <!-- Live Download & Google Analytics Monitor Modal -->
+  <div class="modal-backdrop" id="stats-modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="stats-modal-title">
+      <div class="modal-head">
+        <div>
+          <span class="mono tiny-label text-mint">TELEMETRY &amp; DISTRIBUTION</span>
+          <h3 id="stats-modal-title">Download Counts &amp; Google Analytics</h3>
+        </div>
+        <button type="button" class="modal-close" id="close-stats-btn" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modal-summary-grid">
+        <div class="modal-stat-box">
+          <span class="mono tiny-label">TOTAL APK DOWNLOADS</span>
+          <strong class="mono text-mint" id="modal-total-downloads">--</strong>
+        </div>
+        <div class="modal-stat-box">
+          <span class="mono tiny-label">LATEST RELEASE</span>
+          <strong class="mono" id="modal-latest-downloads">--</strong>
+        </div>
+        <div class="modal-stat-box">
+          <span class="mono tiny-label">GA4 MEASUREMENT ID</span>
+          <strong class="mono text-ice" id="modal-ga-id">--</strong>
+        </div>
+      </div>
+
+      <div class="release-table-wrap">
+        <table class="release-table">
+          <thead>
+            <tr>
+              <th>Release</th>
+              <th>APK Asset</th>
+              <th>Size</th>
+              <th>Downloads</th>
+            </tr>
+          </thead>
+          <tbody id="release-table-body">
+            <tr><td colspan="4" class="mono muted">Fetching GitHub Releases API…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="modal-note">
+        Download totals update live from the public GitHub Releases API. Client events (<code>apk_download_click</code>, <code>battery_demo_interact</code>, <code>screen_sample_view</code>) also stream to Google Analytics 4 once your <code>gaMeasurementId</code> is set in <code>docs/config.js</code>.
+      </p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -61,6 +61,7 @@ import com.example.R
 import com.example.data.ble.PowerMath
 import com.example.data.prefs.DisplayDensity
 import com.example.data.prefs.TemperatureUnit
+import com.example.data.network.ApkInstallState
 import com.example.data.repository.UpdateCheckResult
 import com.example.ui.SettingsUiState
 import com.example.ui.theme.AmberDim
@@ -91,6 +92,10 @@ fun SettingsScreen(
     onRequestNotificationPermission: () -> Unit,
     onSendTestAlert: () -> Unit,
     onCheckForUpdates: (String) -> Unit,
+    onDownloadAndInstallApk: (String) -> Unit,
+    onRetryPendingApkInstall: () -> Unit,
+    onOpenUnknownSourcesSettings: () -> Unit,
+    onUninstallForCleanInstall: () -> Unit,
     onClearCache: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -359,29 +364,161 @@ fun SettingsScreen(
                                                 color = ElectricEmerald
                                             )
                                         }
-                                        Button(
-                                            onClick = {
-                                                val intent = Intent(
-                                                    Intent.ACTION_VIEW,
-                                                    Uri.parse(result.apkDownloadUrl)
+                                        when (val installState = uiState.apkInstallState) {
+                                            is ApkInstallState.Downloading -> {
+                                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Text(
+                                                        text = "Downloading APK… ${installState.progressPercent}%",
+                                                        style = MonoLabelSmall,
+                                                        color = ElectricEmerald
+                                                    )
+                                                    androidx.compose.material3.LinearProgressIndicator(
+                                                        progress = { installState.progressPercent / 100f },
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        color = ElectricEmerald,
+                                                        trackColor = CarbonElevated
+                                                    )
+                                                }
+                                            }
+                                            is ApkInstallState.NeedsInstallPermission -> {
+                                                Text(
+                                                    text = "Allow VoltCore to install updates in Android Settings, then tap Install APK.",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = CautionAmber
                                                 )
-                                                context.startActivity(intent)
-                                            },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = ElectricEmerald,
-                                                contentColor = OledBlack
-                                            ),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .testTag("download_apk_button")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.CloudDownload,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(stringResource(R.string.action_download_apk))
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    OutlinedButton(
+                                                        onClick = onOpenUnknownSourcesSettings,
+                                                        border = BorderStroke(1.dp, CautionAmber),
+                                                        modifier = Modifier.weight(1f)
+                                                    ) {
+                                                        Text("Allow Installs", color = CautionAmber)
+                                                    }
+                                                    Button(
+                                                        onClick = onRetryPendingApkInstall,
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = ElectricEmerald,
+                                                            contentColor = OledBlack
+                                                        ),
+                                                        modifier = Modifier.weight(1f)
+                                                    ) {
+                                                        Text("Install APK")
+                                                    }
+                                                }
+                                            }
+                                            is ApkInstallState.ReadyToInstall -> {
+                                                Button(
+                                                    onClick = onRetryPendingApkInstall,
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = ElectricEmerald,
+                                                        contentColor = OledBlack
+                                                    ),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .testTag("download_apk_button")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.SystemUpdate,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text("Install Verified APK")
+                                                }
+                                            }
+                                            is ApkInstallState.SignatureMismatch -> {
+                                                Text(
+                                                    text = installState.reason,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = CautionAmber
+                                                )
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    OutlinedButton(
+                                                        onClick = {
+                                                            val intent = Intent(
+                                                                Intent.ACTION_VIEW,
+                                                                Uri.parse(installState.fallbackUrl)
+                                                            )
+                                                            context.startActivity(intent)
+                                                        },
+                                                        border = BorderStroke(1.dp, HairlineBorder),
+                                                        modifier = Modifier.weight(1f)
+                                                    ) {
+                                                        Text("Open in Browser", color = PureWhite)
+                                                    }
+                                                    Button(
+                                                        onClick = onUninstallForCleanInstall,
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = CriticalCoral,
+                                                            contentColor = OledBlack
+                                                        ),
+                                                        modifier = Modifier.weight(1f)
+                                                    ) {
+                                                        Text("Uninstall First")
+                                                    }
+                                                }
+                                            }
+                                            is ApkInstallState.Error -> {
+                                                Text(
+                                                    text = installState.message,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = CriticalCoral
+                                                )
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Button(
+                                                        onClick = { onDownloadAndInstallApk(result.apkDownloadUrl) },
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = ElectricEmerald,
+                                                            contentColor = OledBlack
+                                                        ),
+                                                        modifier = Modifier.weight(1f)
+                                                    ) {
+                                                        Text("Retry Download")
+                                                    }
+                                                    installState.fallbackUrl?.let { url ->
+                                                        OutlinedButton(
+                                                            onClick = {
+                                                                context.startActivity(
+                                                                    Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                                )
+                                                            },
+                                                            border = BorderStroke(1.dp, HairlineBorder),
+                                                            modifier = Modifier.weight(1f)
+                                                        ) {
+                                                            Text("Browser", color = PureWhite)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            ApkInstallState.Idle -> {
+                                                Button(
+                                                    onClick = { onDownloadAndInstallApk(result.apkDownloadUrl) },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = ElectricEmerald,
+                                                        contentColor = OledBlack
+                                                    ),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .testTag("download_apk_button")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.CloudDownload,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(stringResource(R.string.action_download_apk))
+                                                }
+                                            }
                                         }
                                     }
                                 }

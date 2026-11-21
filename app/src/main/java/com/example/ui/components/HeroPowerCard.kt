@@ -45,10 +45,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +75,7 @@ import com.example.ui.theme.HairlineBorder
 import com.example.ui.theme.HeroSocTextStyle
 import com.example.ui.theme.MonoLabelSmall
 import com.example.ui.theme.MonoMetricMedium
+import com.example.ui.theme.OledBlack
 import com.example.ui.theme.PrecisionCyan
 import com.example.ui.theme.PureWhite
 import com.example.ui.theme.SlateMuted
@@ -127,7 +132,7 @@ fun HeroPowerCard(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = LinearEasing),
+            animation = tween(durationMillis = 1800, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "flowPhase"
@@ -205,22 +210,155 @@ fun HeroPowerCard(
                 Text(
                     text = "${remainingWh.toInt()} / ${packCapacityWh.toInt()} Wh",
                     style = MonoLabelSmall,
-                    color = SlateMuted
+                    fontWeight = FontWeight.Bold,
+                    color = PureWhite.copy(alpha = 0.85f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             Box(
-                modifier = Modifier.size(216.dp),
+                modifier = Modifier.size(230.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("hero_liquid_battery_canvas")
+                ) {
                     val strokeWidth = 14.dp.toPx()
                     val pad = strokeWidth / 2f
                     val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
                     val topLeft = Offset(pad, pad)
 
+                    // Inner animated liquid juice vessel clipped inside the SoC ring
+                    val vesselRadius = (size.minDimension / 2f) - strokeWidth - 6.dp.toPx()
+                    if (vesselRadius > 0f) {
+                        val vesselLeft = center.x - vesselRadius
+                        val vesselTop = center.y - vesselRadius
+                        val vesselDiameter = vesselRadius * 2f
+                        val vesselBottom = vesselTop + vesselDiameter
+
+                        val vesselPath = Path().apply {
+                            addOval(
+                                Rect(
+                                    offset = Offset(vesselLeft, vesselTop),
+                                    size = Size(vesselDiameter, vesselDiameter)
+                                )
+                            )
+                        }
+
+                        drawCircle(
+                            color = OledBlack.copy(alpha = 0.72f),
+                            radius = vesselRadius,
+                            center = center
+                        )
+                        drawCircle(
+                            color = HairlineBorder.copy(alpha = 0.55f),
+                            radius = vesselRadius,
+                            center = center,
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+
+                        clipPath(vesselPath) {
+                            if (animatedProgress > 0.005f) {
+                                val fillTopY = vesselBottom - (vesselDiameter * animatedProgress)
+                                val edgeDamp = sin(animatedProgress * PI).toFloat().coerceIn(0.15f, 1f)
+                                val amplitude = (if (isActivelyFlowing) 6.5.dp.toPx() else 3.5.dp.toPx()) * edgeDamp
+                                val phaseRad = (flowPhase * 2.0 * PI).toFloat()
+
+                                // Back secondary wave
+                                val backWave = Path().apply {
+                                    moveTo(vesselLeft, vesselBottom)
+                                    val steps = 36
+                                    for (s in 0..steps) {
+                                        val frac = s / steps.toFloat()
+                                        val x = vesselLeft + frac * vesselDiameter
+                                        val y = fillTopY + sin(frac * (2f * PI.toFloat()) - phaseRad + 1.1f) * (amplitude * 0.85f)
+                                        lineTo(x, y)
+                                    }
+                                    lineTo(vesselLeft + vesselDiameter, vesselBottom)
+                                    close()
+                                }
+                                drawPath(
+                                    path = backWave,
+                                    color = accentColor.copy(alpha = 0.22f)
+                                )
+
+                                // Front primary liquid juice wave + top meniscus crest
+                                val frontWave = Path()
+                                val crestPath = Path()
+                                val steps = 40
+                                for (s in 0..steps) {
+                                    val frac = s / steps.toFloat()
+                                    val x = vesselLeft + frac * vesselDiameter
+                                    val y = fillTopY + sin(frac * (2.4f * PI.toFloat()) + phaseRad) * amplitude
+                                    if (s == 0) {
+                                        frontWave.moveTo(x, vesselBottom)
+                                        frontWave.lineTo(x, y)
+                                        crestPath.moveTo(x, y)
+                                    } else {
+                                        frontWave.lineTo(x, y)
+                                        crestPath.lineTo(x, y)
+                                    }
+                                }
+                                frontWave.lineTo(vesselLeft + vesselDiameter, vesselBottom)
+                                frontWave.close()
+
+                                drawPath(
+                                    path = frontWave,
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            accentColor.copy(alpha = 0.48f),
+                                            accentColor.copy(alpha = 0.16f)
+                                        ),
+                                        startY = fillTopY - amplitude,
+                                        endY = vesselBottom
+                                    )
+                                )
+                                drawPath(
+                                    path = crestPath,
+                                    color = accentColor.copy(alpha = 0.85f),
+                                    style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
+                                )
+
+                                // Rising charge bubbles inside the liquid vessel when charging/pass-through
+                                if (isCharging || passThroughFlow.isFloatCarryActive) {
+                                    val liquidDepth = (vesselBottom - fillTopY).coerceAtLeast(1f)
+                                    for (b in 0..4) {
+                                        val bPhase = (flowPhase + b * 0.21f) % 1f
+                                        val bx = vesselLeft + vesselDiameter * (0.22f + (b * 0.14f)) +
+                                            sin((bPhase * 2f * PI + b).toFloat()) * 4.dp.toPx()
+                                        val by = vesselBottom - (bPhase * liquidDepth)
+                                        if (by > fillTopY + 4.dp.toPx()) {
+                                            drawCircle(
+                                                color = PureWhite.copy(alpha = (1f - bPhase) * 0.45f),
+                                                radius = (1.6f + (b % 3) * 0.8f).dp.toPx(),
+                                                center = Offset(bx, by)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Soft radial contrast scrim behind bold SoC numerals
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    OledBlack.copy(alpha = 0.62f),
+                                    OledBlack.copy(alpha = 0.25f),
+                                    Color.Transparent
+                                ),
+                                center = center,
+                                radius = vesselRadius * 0.86f
+                            ),
+                            radius = vesselRadius,
+                            center = center
+                        )
+                    }
+
+                    // Outer perimeter track & SoC progress arc
                     drawArc(
                         color = CarbonElevated,
                         startAngle = 135f,
@@ -254,7 +392,7 @@ fun HeroPowerCard(
                         val pulseStart = 135f + (directionPhase * travelSpan)
                         val edgeFade = sin(flowPhase * PI).toFloat().coerceIn(0.22f, 1f)
                         drawArc(
-                            color = PureWhite.copy(alpha = 0.72f * edgeFade),
+                            color = PureWhite.copy(alpha = 0.78f * edgeFade),
                             startAngle = pulseStart,
                             sweepAngle = pulseSpan,
                             useCenter = false,
@@ -278,6 +416,7 @@ fun HeroPowerCard(
                         Text(
                             text = "%",
                             style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.ExtraBold,
                             color = accentColor,
                             modifier = Modifier.padding(bottom = 10.dp, start = 2.dp)
                         )
@@ -285,7 +424,8 @@ fun HeroPowerCard(
                     Text(
                         text = snapshot.deviceName.uppercase(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = SlateMuted,
+                        fontWeight = FontWeight.Bold,
+                        color = PureWhite.copy(alpha = 0.78f),
                         letterSpacing = 1.2.sp,
                         maxLines = 1
                     )
@@ -293,6 +433,7 @@ fun HeroPowerCard(
                     Text(
                         text = specSummary,
                         style = MonoLabelSmall,
+                        fontWeight = FontWeight.Bold,
                         color = accentColor,
                         maxLines = 1,
                         modifier = Modifier.testTag("hero_pack_specs")
@@ -357,6 +498,8 @@ fun HeroPowerCard(
                                 "${absWatts.toInt()} W"
                             },
                             style = MonoMetricMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 21.sp,
                             color = PureWhite,
                             modifier = Modifier.testTag("hero_wattage_value")
                         )
@@ -398,8 +541,9 @@ fun HeroPowerCard(
                     Text(
                         text = formattedEta,
                         style = MonoMetricMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 21.sp,
                         color = accentColor,
-                        fontWeight = FontWeight.Bold,
                         modifier = Modifier.testTag("hero_eta_value")
                     )
                 }
@@ -457,6 +601,7 @@ private fun PassThroughFlowLine(
                     Text(
                         text = if (inActive) "+${flow.grossInWatts.toInt()} W" else "0 W",
                         style = MonoMetricMedium,
+                        fontWeight = FontWeight.ExtraBold,
                         color = if (inActive) ElectricEmerald else SlateMuted,
                         modifier = Modifier.testTag("passthrough_gross_in")
                     )
@@ -477,6 +622,7 @@ private fun PassThroughFlowLine(
                     Text(
                         text = netText,
                         style = MonoMetricMedium,
+                        fontWeight = FontWeight.ExtraBold,
                         color = netColor,
                         modifier = Modifier.testTag("passthrough_net")
                     )
@@ -497,6 +643,7 @@ private fun PassThroughFlowLine(
                     Text(
                         text = "${flow.loadOutWatts.toInt()} W",
                         style = MonoMetricMedium,
+                        fontWeight = FontWeight.ExtraBold,
                         color = if (outActive) PrecisionCyan else SlateMuted,
                         modifier = Modifier.testTag("passthrough_load_out")
                     )

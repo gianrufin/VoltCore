@@ -201,12 +201,14 @@ private fun MetricTile(
                 Text(
                     text = value,
                     style = MonoMetricLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
                     color = PureWhite
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = unit,
                     style = MaterialTheme.typography.labelLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                     color = accentColor,
                     modifier = Modifier.padding(bottom = 3.dp)
                 )

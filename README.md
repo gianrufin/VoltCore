@@ -7,13 +7,14 @@
 
 ---
 
-## Download Latest APK
+## Download Latest APK & Landing Page
 
-> **Current Packaged Version:** `v1.0.0` (`versionCode: 1`)
+> **Current Packaged Version:** `v1.1.0` (`versionCode: 2`)
+> **GitHub Pages Showcase:** [`gianrufin.github.io/VoltCore`](https://gianrufin.github.io/VoltCore/)
 
 <p align="left">
   <a href="https://github.com/gianrufin/VoltCore/releases/latest/download/VoltCore-latest.apk">
-    <img src="https://img.shields.io/badge/Download_APK-VoltCore_Latest-00E676?style=for-the-badge&logo=android&logoColor=000000" alt="Download Latest APK" />
+    <img src="https://img.shields.io/badge/Download_APK-VoltCore_Latest-2EF29B?style=for-the-badge&logo=android&logoColor=000000" alt="Download Latest APK" />
   </a>
   &nbsp;
   <a href="https://github.com/gianrufin/VoltCore/releases/latest">
@@ -23,15 +24,16 @@
 
 - **Direct APK Download:** [`VoltCore-latest.apk`](https://github.com/gianrufin/VoltCore/releases/latest/download/VoltCore-latest.apk)
 - **All Releases & Changelogs:** [`github.com/gianrufin/VoltCore/releases`](https://github.com/gianrufin/VoltCore/releases)
+- **GitHub Pages Analytics Setup:** In your GitHub repo **Settings → Pages**, choose **GitHub Actions** as the source. To enable Google Analytics 4 tracking on the landing page, set your `gaMeasurementId` (`G-XXXXXXXXXX`) inside `docs/config.js`.
 
 ---
 
 ## Publishing Releases on GitHub
 
 1. Push updates from AI Studio to `gianrufin/VoltCore`.
-2. Open **Actions → Release APK → Run workflow** (or push a version tag such as `v1.0.0`).
-3. GitHub Actions automatically builds the APK, runs unit & Robolectric tests, and publishes a Release containing `VoltCore-<version>.apk` and `VoltCore-latest.apk`.
-4. Inside **VoltCore → Settings → GitHub APK Updater**, `gianrufin/VoltCore` is pre-configured so users can check for and install new releases directly from the app.
+2. Open **Actions → Release APK → Run workflow** (or push a version tag such as `v1.1.0`).
+3. GitHub Actions automatically computes a monotonic `versionCode`, builds the APK, runs unit & Robolectric tests, and publishes a Release containing `VoltCore-<version>.apk` and `VoltCore-latest.apk`.
+4. Inside **VoltCore → Settings → GitHub APK Updater**, `gianrufin/VoltCore` downloads, verifies signing parity, and launches Android's `FileProvider` package installer directly.
 
 ---
 
