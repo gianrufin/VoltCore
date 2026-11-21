@@ -4,6 +4,7 @@
 window.VOLTCORE_CONFIG = {
   githubOwner: "gianrufin",
   githubRepo: "VoltCore",
+  appVersion: "1.1.0",
   gaMeasurementId: "G-XXXXXXXXXX",
   pagesUrl: "https://gianrufin.github.io/VoltCore/"
 };
