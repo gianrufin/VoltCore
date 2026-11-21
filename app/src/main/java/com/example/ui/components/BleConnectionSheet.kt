@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -128,12 +129,14 @@ fun BleConnectionSheet(
                             )
                             Button(
                                 onClick = onRequestBlePermissions,
+                                shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = ElectricEmerald,
                                     contentColor = OledBlack
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
                                     .testTag("grant_ble_permission_button")
                             ) {
                                 Text(stringResource(R.string.ble_grant_permission))
@@ -149,12 +152,14 @@ fun BleConnectionSheet(
                         val isScanning = bleState.status == BleConnectionStatus.SCANNING
                         Button(
                             onClick = { if (isScanning) onStopScan() else onStartScan() },
+                            shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (isScanning) CarbonElevated else ElectricEmerald,
                                 contentColor = if (isScanning) PureWhite else OledBlack
                             ),
                             modifier = Modifier
                                 .weight(1f)
+                                .heightIn(min = 48.dp)
                                 .testTag("ble_scan_button")
                         ) {
                             if (isScanning) {
@@ -181,8 +186,11 @@ fun BleConnectionSheet(
                         ) {
                             OutlinedButton(
                                 onClick = onDisconnect,
+                                shape = RoundedCornerShape(10.dp),
                                 border = BorderStroke(1.dp, CriticalCoral),
-                                modifier = Modifier.testTag("ble_disconnect_button")
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("ble_disconnect_button")
                             ) {
                                 Text(
                                     text = stringResource(R.string.action_disconnect),
@@ -200,6 +208,7 @@ fun BleConnectionSheet(
                         FilterChip(
                             selected = bleState.filterPowerStationsOnly,
                             onClick = { onTogglePowerStationsOnly(true) },
+                            shape = RoundedCornerShape(8.dp),
                             label = { Text(stringResource(R.string.ble_filter_stations_only)) },
                             leadingIcon = {
                                 Icon(
@@ -225,12 +234,15 @@ fun BleConnectionSheet(
                                 borderColor = HairlineBorder,
                                 selectedBorderColor = ElectricEmerald
                             ),
-                            modifier = Modifier.testTag("filter_stations_only_chip")
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("filter_stations_only_chip")
                         )
 
                         FilterChip(
                             selected = !bleState.filterPowerStationsOnly,
                             onClick = { onTogglePowerStationsOnly(false) },
+                            shape = RoundedCornerShape(8.dp),
                             label = {
                                 val countSuffix = if (bleState.hiddenOtherDeviceCount > 0) {
                                     " (+${bleState.hiddenOtherDeviceCount})"
@@ -251,7 +263,9 @@ fun BleConnectionSheet(
                                 borderColor = HairlineBorder,
                                 selectedBorderColor = PrecisionCyan
                             ),
-                            modifier = Modifier.testTag("filter_all_ble_chip")
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("filter_all_ble_chip")
                         )
                     }
 

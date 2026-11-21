@@ -8,14 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Autorenew
-import androidx.compose.material.icons.rounded.ElectricBolt
-import androidx.compose.material.icons.rounded.SwapHoriz
-import androidx.compose.material.icons.rounded.Thermostat
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,11 +16,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.R
 import com.example.data.ble.PowerMath
 import com.example.data.local.TelemetrySnapshotEntity
 import com.example.data.prefs.TemperatureUnit
@@ -61,31 +53,31 @@ fun TelemetryGrid(
     val voltageSubtitle = buildString {
         if (effectiveCells > 0) append("${effectiveCells}S · ")
         if (cellDeltaMv != null) {
-            append("Δ ${cellDeltaMv}mV")
+            append("Δ ${cellDeltaMv} mV")
         } else {
-            append("Nom ${"%.1f".format(packNominalVoltage)}V")
+            append("Nom ${"%.1f".format(packNominalVoltage)} V")
         }
     }
 
     val nominalAh = if (snapshot.nominalCapacityAh > 0f) snapshot.nominalCapacityAh else packNominalAh
     val cycleSubtitle = if (snapshot.remainingCapacityAh > 0f) {
-        "${snapshot.remainingCapacityAh.toInt()}/${nominalAh.toInt()}Ah · ${snapshot.stateOfHealthPercent}% SoH"
+        "${snapshot.remainingCapacityAh.toInt()}/${nominalAh.toInt()} Ah · ${snapshot.stateOfHealthPercent}% SoH"
     } else {
-        "${nominalAh.toInt()}Ah · ${snapshot.stateOfHealthPercent}% SoH"
+        "${nominalAh.toInt()} Ah · ${snapshot.stateOfHealthPercent}% SoH"
     }
 
-    val tempAccent = when {
+    val tempWarningColor = when {
         snapshot.temperatureCelsius >= highTempThreshold -> CriticalCoral
         snapshot.isCharging && snapshot.temperatureCelsius <= coldChargeThreshold -> CautionAmber
         snapshot.temperatureCelsius >= highTempThreshold - 5f -> CautionAmber
-        else -> ElectricEmerald
+        else -> null
     }
 
     val displayPackTemp = PowerMath.convertTemp(snapshot.temperatureCelsius, temperatureUnit)
     val displayMosTemp = PowerMath.formatTempWithUnit(snapshot.mosfetTempCelsius, temperatureUnit)
     val tempSymbol = PowerMath.tempUnitSymbol(temperatureUnit)
 
-    val currentAccent = when {
+    val currentUnitColor = when {
         snapshot.currentAmps > 0.1f -> ElectricEmerald
         snapshot.currentAmps < -0.1f -> PrecisionCyan
         else -> SlateMuted
@@ -93,35 +85,33 @@ fun TelemetryGrid(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(
-            text = stringResource(R.string.section_critical_diagnostics),
-            style = MaterialTheme.typography.labelSmall,
-            color = SlateMuted
-        )
-
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             MetricTile(
-                title = stringResource(R.string.metric_voltage),
+                title = "Voltage",
                 value = "%.2f".format(snapshot.voltageVolts),
                 unit = "V",
                 subtitle = voltageSubtitle,
-                icon = Icons.Rounded.ElectricBolt,
-                accentColor = PureWhite,
+                valueColor = PureWhite,
+                unitColor = SlateMuted,
                 testTag = "metric_card_voltage",
                 modifier = Modifier.weight(1f)
             )
             MetricTile(
-                title = stringResource(R.string.metric_current),
+                title = "Current",
                 value = "%+.2f".format(snapshot.currentAmps),
                 unit = "A",
-                subtitle = if (snapshot.isCharging) "Inflow active" else "Outflow draw",
-                icon = Icons.Rounded.SwapHoriz,
-                accentColor = currentAccent,
+                subtitle = when {
+                    snapshot.currentAmps > 0.1f -> "Charging flow"
+                    snapshot.currentAmps < -0.1f -> "Load draw"
+                    else -> "Idle"
+                },
+                valueColor = PureWhite,
+                unitColor = currentUnitColor,
                 testTag = "metric_card_current",
                 modifier = Modifier.weight(1f)
             )
@@ -129,25 +119,25 @@ fun TelemetryGrid(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             MetricTile(
-                title = stringResource(R.string.metric_temperature),
+                title = "Temperature",
                 value = "%.1f".format(displayPackTemp),
                 unit = tempSymbol,
                 subtitle = "MOS $displayMosTemp",
-                icon = Icons.Rounded.Thermostat,
-                accentColor = tempAccent,
+                valueColor = tempWarningColor ?: PureWhite,
+                unitColor = tempWarningColor ?: ElectricEmerald,
                 testTag = "metric_card_temperature",
                 modifier = Modifier.weight(1f)
             )
             MetricTile(
-                title = stringResource(R.string.metric_cycles),
+                title = "Cycle count",
                 value = "${snapshot.cycleCount}",
-                unit = "CYC",
+                unit = if (snapshot.cycleCount == 1) "cycle" else "cycles",
                 subtitle = cycleSubtitle,
-                icon = Icons.Rounded.Autorenew,
-                accentColor = ElectricEmerald,
+                valueColor = PureWhite,
+                unitColor = SlateMuted,
                 testTag = "metric_card_cycles",
                 modifier = Modifier.weight(1f)
             )
@@ -161,8 +151,8 @@ private fun MetricTile(
     value: String,
     unit: String,
     subtitle: String,
-    icon: ImageVector,
-    accentColor: Color,
+    valueColor: Color,
+    unitColor: Color,
     testTag: String,
     modifier: Modifier = Modifier
 ) {
@@ -175,52 +165,46 @@ private fun MetricTile(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(14.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = SlateMuted
-                )
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = accentColor,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = SlateMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     text = value,
                     style = MonoMetricLarge,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
-                    color = PureWhite
+                    color = valueColor,
+                    maxLines = 1,
+                    softWrap = false
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(5.dp))
                 Text(
                     text = unit,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                    color = accentColor,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = unitColor,
+                    maxLines = 1,
+                    softWrap = false,
                     modifier = Modifier.padding(bottom = 3.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = SlateMuted,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

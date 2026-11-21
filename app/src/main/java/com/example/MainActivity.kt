@@ -12,8 +12,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Timeline
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -33,6 +36,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -54,9 +58,8 @@ import com.example.ui.components.BleConnectionSheet
 import com.example.ui.screens.DiagnosticsScreen
 import com.example.ui.screens.MonitorScreen
 import com.example.ui.screens.SettingsScreen
-import com.example.ui.theme.CarbonSurface
-import com.example.ui.theme.ElectricEmerald
-import com.example.ui.theme.EmeraldDim
+import com.example.ui.theme.CarbonElevated
+import com.example.ui.theme.HairlineBorder
 import com.example.ui.theme.OledBlack
 import com.example.ui.theme.PureWhite
 import com.example.ui.theme.SlateMuted
@@ -99,7 +102,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(OledBlack.toArgb()),
-            navigationBarStyle = SystemBarStyle.dark(CarbonSurface.toArgb())
+            navigationBarStyle = SystemBarStyle.dark(OledBlack.toArgb())
         )
         setContent {
             VoltCoreTheme {
@@ -148,42 +151,45 @@ fun VoltCoreApp(
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
                 if (!useNavRail) {
-                    NavigationBar(
-                        containerColor = CarbonSurface,
-                        tonalElevation = 0.dp
-                    ) {
-                        navDestinations.forEach { dest ->
-                            val selected = currentDestination?.hierarchy?.any {
-                                it.route == dest.route
-                            } == true
-                            val label = stringResource(dest.labelRes)
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = {
-                                    navController.navigate(dest.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
+                    Column {
+                        HorizontalDivider(thickness = 1.dp, color = HairlineBorder)
+                        NavigationBar(
+                            containerColor = OledBlack,
+                            tonalElevation = 0.dp
+                        ) {
+                            navDestinations.forEach { dest ->
+                                val selected = currentDestination?.hierarchy?.any {
+                                    it.route == dest.route
+                                } == true
+                                val label = stringResource(dest.labelRes)
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = {
+                                        navController.navigate(dest.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
                                         }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
-                                        contentDescription = label
-                                    )
-                                },
-                                label = { Text(label) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = ElectricEmerald,
-                                    selectedTextColor = PureWhite,
-                                    indicatorColor = EmeraldDim,
-                                    unselectedIconColor = SlateMuted,
-                                    unselectedTextColor = SlateMuted
-                                ),
-                                modifier = Modifier.testTag("nav_${dest.route}")
-                            )
+                                    },
+                                    icon = {
+                                        Icon(
+                                            imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
+                                            contentDescription = label
+                                        )
+                                    },
+                                    label = { Text(label) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = PureWhite,
+                                        selectedTextColor = PureWhite,
+                                        indicatorColor = CarbonElevated,
+                                        unselectedIconColor = SlateMuted,
+                                        unselectedTextColor = SlateMuted
+                                    ),
+                                    modifier = Modifier.testTag("nav_${dest.route}")
+                                )
+                            }
                         }
                     }
                 }
@@ -196,7 +202,7 @@ fun VoltCoreApp(
             ) {
                 if (useNavRail) {
                     NavigationRail(
-                        containerColor = CarbonSurface
+                        containerColor = OledBlack
                     ) {
                         navDestinations.forEach { dest ->
                             val selected = currentDestination?.hierarchy?.any {
@@ -222,9 +228,9 @@ fun VoltCoreApp(
                                 },
                                 label = { Text(label) },
                                 colors = NavigationRailItemDefaults.colors(
-                                    selectedIconColor = ElectricEmerald,
+                                    selectedIconColor = PureWhite,
                                     selectedTextColor = PureWhite,
-                                    indicatorColor = EmeraldDim,
+                                    indicatorColor = CarbonElevated,
                                     unselectedIconColor = SlateMuted,
                                     unselectedTextColor = SlateMuted
                                 ),
@@ -232,6 +238,11 @@ fun VoltCoreApp(
                             )
                         }
                     }
+                    VerticalDivider(
+                        thickness = 1.dp,
+                        color = HairlineBorder,
+                        modifier = Modifier.fillMaxHeight()
+                    )
                 }
 
                 Box(modifier = Modifier.weight(1f)) {

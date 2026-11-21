@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,7 +17,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.ElectricalServices
 import androidx.compose.material.icons.rounded.Power
 import androidx.compose.material.icons.rounded.Usb
@@ -36,6 +36,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.ble.PowerMath
@@ -83,44 +85,48 @@ fun PluggedDevicesSection(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
                 Text(
-                    text = stringResource(R.string.section_plugged_devices),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = SlateMuted
+                    text = "Plugged devices",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = PureWhite
                 )
                 if (devices.isNotEmpty()) {
                     Text(
-                        text = "${activePluggedWatts.toInt()} W tracked • ${packOutputWatts.toInt()} W pack draw",
+                        text = "${activePluggedWatts.toInt()} W tracked · ${packOutputWatts.toInt()} W pack draw",
                         style = MonoLabelSmall,
-                        color = PrecisionCyan
+                        color = PrecisionCyan,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
             Surface(
                 onClick = { showAddDialog = true },
-                shape = RoundedCornerShape(50),
+                shape = RoundedCornerShape(10.dp),
                 color = CarbonElevated,
                 border = BorderStroke(1.dp, HairlineBorder),
-                modifier = Modifier.testTag("add_plugged_device_button")
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("add_plugged_device_button")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Add,
                         contentDescription = stringResource(R.string.action_add_device),
                         tint = ElectricEmerald,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
@@ -139,28 +145,14 @@ fun PluggedDevicesSection(
                 color = CarbonSurface,
                 border = BorderStroke(1.dp, HairlineBorder)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Devices,
-                        contentDescription = null,
-                        tint = SlateMuted,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = stringResource(R.string.empty_plugged_devices),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = SlateMuted
-                    )
-                }
+                Text(
+                    text = stringResource(R.string.empty_plugged_devices),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = SlateMuted,
+                    modifier = Modifier.padding(14.dp)
+                )
             }
         } else {
-            // Output load utilization bar
             val denominator = packOutputWatts.coerceAtLeast(activePluggedWatts).coerceAtLeast(1f)
             val ratio = (activePluggedWatts / denominator).coerceIn(0f, 1f)
             LinearProgressIndicator(
@@ -256,43 +248,46 @@ private fun PluggedDeviceRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = if (device.isActive) CyanDim else CarbonElevated,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     imageVector = portIcon,
                     contentDescription = port.label,
                     tint = if (device.isActive) PrecisionCyan else SlateMuted,
-                    modifier = Modifier.padding(9.dp)
+                    modifier = Modifier.padding(8.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = device.name,
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (device.isActive) PureWhite else SlateMuted
+                    color = if (device.isActive) PureWhite else SlateMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = subtitleText,
                     style = MonoLabelSmall,
                     color = if (device.isActive && soloRuntimeLabel != null) PrecisionCyan else SlateMuted,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
             Text(
-                text = if (device.isActive) "${device.estimatedWatts.toInt()} W" else "OFF",
+                text = if (device.isActive) "${device.estimatedWatts.toInt()} W" else "Off",
                 style = MonoMetricMedium,
                 color = if (device.isActive) PureWhite else SlateMuted,
-                modifier = Modifier.padding(end = 8.dp)
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
 
             Switch(
@@ -304,12 +299,16 @@ private fun PluggedDeviceRow(
                     uncheckedThumbColor = SlateMuted,
                     uncheckedTrackColor = CarbonElevated
                 ),
-                modifier = Modifier.testTag("toggle_device_${device.id}")
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("toggle_device_${device.id}")
             )
 
             IconButton(
                 onClick = onDelete,
-                modifier = Modifier.testTag("delete_device_${device.id}")
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("delete_device_${device.id}")
             ) {
                 Icon(
                     imageVector = Icons.Rounded.DeleteOutline,
@@ -389,7 +388,7 @@ private fun PluggedDeviceDialog(
 
                 Text(
                     text = stringResource(R.string.label_device_port),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = SlateMuted
                 )
 
@@ -426,17 +425,23 @@ private fun PluggedDeviceDialog(
             Button(
                 onClick = { onSave(name.ifBlank { selectedPort.label }, selectedPort, watts) },
                 enabled = watts > 0f,
+                shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = ElectricEmerald,
                     contentColor = OledBlack
                 ),
-                modifier = Modifier.testTag("save_device_button")
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("save_device_button")
             ) {
                 Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.heightIn(min = 48.dp)
+            ) {
                 Text(stringResource(R.string.action_cancel), color = SlateMuted)
             }
         }
@@ -453,7 +458,15 @@ private fun PortChip(
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(port.label, style = MaterialTheme.typography.labelSmall) },
+        shape = RoundedCornerShape(8.dp),
+        label = {
+            Text(
+                text = port.label,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = EmeraldDim,
             selectedLabelColor = ElectricEmerald,
@@ -465,6 +478,6 @@ private fun PortChip(
             borderColor = HairlineBorder,
             selectedBorderColor = ElectricEmerald
         ),
-        modifier = modifier
+        modifier = modifier.heightIn(min = 48.dp)
     )
 }

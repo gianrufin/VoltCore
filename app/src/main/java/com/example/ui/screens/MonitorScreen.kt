@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,8 +50,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.ble.BleConnectionStatus
 import com.example.data.ble.BleUiState
@@ -147,7 +149,7 @@ fun MonitorScreen(
                     .widthIn(max = 1040.dp)
                     .align(Alignment.TopCenter),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item {
                     MonitorTopHeader(
@@ -180,12 +182,12 @@ fun MonitorScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = stringResource(R.string.section_saved_stations),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = SlateMuted
+                                    text = "Saved stations",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = PureWhite
                                 )
                                 Text(
-                                    text = "${uiState.savedStations.size} UNIT${if (uiState.savedStations.size == 1) "" else "S"}",
+                                    text = "${uiState.savedStations.size}",
                                     style = MonoLabelSmall,
                                     color = SlateMuted
                                 )
@@ -235,7 +237,7 @@ fun MonitorScreen(
                             )
                             Column(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(18.dp)
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
                                 TelemetryGrid(
                                     snapshot = liveSnapshot,
@@ -321,21 +323,21 @@ private fun MonitorTopHeader(
     onCloseDashboard: () -> Unit,
     onOpenConnectionSheet: () -> Unit
 ) {
-    val (pillBg, pillFg, pillText) = when (uiState.connectionMode) {
+    val (statusDotColor, statusTextColor, statusLabel) = when (uiState.connectionMode) {
         ConnectionMode.LIVE_BLE -> Triple(
-            EmeraldDim,
             ElectricEmerald,
-            uiState.bleState.detectedProtocol?.uppercase() ?: stringResource(R.string.status_live_ble)
+            ElectricEmerald,
+            uiState.bleState.detectedProtocol ?: "Connected"
         )
         ConnectionMode.CONNECTING -> Triple(
-            CyanDim,
             PrecisionCyan,
-            stringResource(R.string.status_connecting)
+            PrecisionCyan,
+            "Connecting"
         )
         ConnectionMode.DISCONNECTED -> Triple(
-            CarbonElevated,
             SlateMuted,
-            stringResource(R.string.status_disconnected)
+            SlateMuted,
+            "Disconnected"
         )
     }
 
@@ -344,24 +346,29 @@ private fun MonitorTopHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(
+            modifier = Modifier.weight(1f).padding(end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             if (showDashboard) {
                 Surface(
                     onClick = onCloseDashboard,
-                    shape = RoundedCornerShape(50),
-                    color = CarbonElevated,
+                    shape = RoundedCornerShape(10.dp),
+                    color = CarbonSurface,
                     border = BorderStroke(1.dp, HairlineBorder),
-                    modifier = Modifier.testTag("back_to_stations_button")
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("back_to_stations_button")
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = stringResource(R.string.action_back_to_stations),
                             tint = PureWhite,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
@@ -379,40 +386,45 @@ private fun MonitorTopHeader(
                 )
             }
 
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = pillBg
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(pillFg)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = pillText,
-                        style = MonoLabelSmall,
-                        color = pillFg,
-                        modifier = Modifier.testTag("connection_status_pill")
-                    )
-                }
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(statusDotColor)
+                )
+                Text(
+                    text = statusLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = statusTextColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("connection_status_pill")
+                )
             }
         }
 
         Surface(
             onClick = onOpenConnectionSheet,
-            shape = RoundedCornerShape(50),
-            color = CarbonElevated,
-            border = BorderStroke(1.dp, HairlineBorder),
-            modifier = Modifier.testTag("connect_bms_button")
+            shape = RoundedCornerShape(10.dp),
+            color = CarbonSurface,
+            border = BorderStroke(
+                1.dp,
+                if (uiState.connectionMode == ConnectionMode.LIVE_BLE) {
+                    ElectricEmerald.copy(alpha = 0.45f)
+                } else {
+                    HairlineBorder
+                }
+            ),
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .testTag("connect_bms_button")
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -434,7 +446,7 @@ private fun MonitorTopHeader(
                     text = if (uiState.connectionMode == ConnectionMode.LIVE_BLE) {
                         "Connected"
                     } else {
-                        stringResource(R.string.action_connect_bms)
+                        "Connect"
                     },
                     style = MaterialTheme.typography.labelLarge,
                     color = PureWhite
@@ -454,39 +466,30 @@ private fun FirstRunPlusLanding(
             .padding(horizontal = 20.dp)
             .testTag("first_run_landing"),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Surface(
-                shape = CircleShape,
-                color = EmeraldDim.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, ElectricEmerald.copy(alpha = 0.25f)),
-                modifier = Modifier.size(118.dp)
-            ) {}
-
-            Surface(
-                onClick = onOpenConnectionSheet,
-                shape = CircleShape,
-                color = ElectricEmerald,
-                shadowElevation = 0.dp,
-                modifier = Modifier
-                    .size(84.dp)
-                    .testTag("empty_connect_ble_button")
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = stringResource(R.string.landing_connect_title),
-                        tint = OledBlack,
-                        modifier = Modifier.size(38.dp)
-                    )
-                }
+        Surface(
+            onClick = onOpenConnectionSheet,
+            shape = CircleShape,
+            color = CarbonSurface,
+            border = BorderStroke(1.dp, ElectricEmerald.copy(alpha = 0.5f)),
+            modifier = Modifier
+                .size(72.dp)
+                .testTag("empty_connect_ble_button")
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Rounded.Add,
+                    contentDescription = stringResource(R.string.landing_connect_title),
+                    tint = ElectricEmerald,
+                    modifier = Modifier.size(32.dp)
+                )
             }
         }
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
                 text = stringResource(R.string.landing_connect_title),
@@ -496,23 +499,10 @@ private fun FirstRunPlusLanding(
             )
             Text(
                 text = stringResource(R.string.landing_connect_subtitle),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = SlateMuted,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.widthIn(max = 340.dp)
-            )
-        }
-
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = CarbonSurface,
-            border = BorderStroke(1.dp, HairlineBorder)
-        ) {
-            Text(
-                text = "JBD · JK · DALY · BLE GATT",
-                style = MonoLabelSmall,
-                color = PrecisionCyan,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                modifier = Modifier.widthIn(max = 320.dp)
             )
         }
     }
@@ -540,13 +530,13 @@ private fun SavedStationCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("saved_station_card_${station.address}"),
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.medium,
         color = CarbonSurface,
         border = BorderStroke(
             width = 1.dp,
             color = when {
-                isConnected -> ElectricEmerald.copy(alpha = 0.65f)
-                isConnecting -> PrecisionCyan.copy(alpha = 0.65f)
+                isConnected -> ElectricEmerald.copy(alpha = 0.55f)
+                isConnecting -> PrecisionCyan.copy(alpha = 0.55f)
                 else -> HairlineBorder
             }
         )
@@ -554,8 +544,8 @@ private fun SavedStationCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -567,30 +557,31 @@ private fun SavedStationCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Surface(
-                        shape = CircleShape,
+                        shape = RoundedCornerShape(10.dp),
                         color = when {
                             isConnected -> EmeraldDim
                             isConnecting -> CyanDim
                             else -> CarbonElevated
                         },
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             if (isConnecting) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(18.dp),
                                     strokeWidth = 2.dp,
                                     color = PrecisionCyan
                                 )
                             } else {
                                 Icon(
-                                    imageVector = when {
-                                        isConnected -> Icons.Rounded.BatteryChargingFull
-                                        else -> Icons.Rounded.BluetoothDisabled
+                                    imageVector = if (isConnected) {
+                                        Icons.Rounded.BatteryChargingFull
+                                    } else {
+                                        Icons.Rounded.BluetoothDisabled
                                     },
                                     contentDescription = null,
                                     tint = if (isConnected) ElectricEmerald else SlateMuted,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -601,16 +592,18 @@ private fun SavedStationCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = station.name,
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             color = PureWhite,
-                            maxLines = 1
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "$specLine · ${station.protocolName}",
                             style = MonoLabelSmall,
                             color = SlateMuted,
-                            maxLines = 1
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -618,7 +611,7 @@ private fun SavedStationCard(
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Surface(
-                    shape = RoundedCornerShape(50),
+                    shape = RoundedCornerShape(8.dp),
                     color = when {
                         isConnected -> EmeraldDim
                         isConnecting -> CyanDim
@@ -627,24 +620,23 @@ private fun SavedStationCard(
                 ) {
                     Text(
                         text = when {
-                            isConnected -> "LIVE"
-                            isConnecting -> "PAIRING"
+                            isConnected -> "Connected"
+                            isConnecting -> "Connecting"
                             else -> stringResource(R.string.status_disconnected_label)
                         },
-                        style = MonoLabelSmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = when {
                             isConnected -> ElectricEmerald
                             isConnecting -> PrecisionCyan
                             else -> SlateMuted
                         },
                         modifier = Modifier
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                             .testTag("saved_station_status")
                     )
                 }
             }
 
-            // Show live SoC & wattage ONLY when actively connected with decoded live telemetry
             if (isConnected && liveSnapshot != null) {
                 val absWatts = abs(liveSnapshot.powerWatts)
                 val wattText = when {
@@ -653,52 +645,57 @@ private fun SavedStationCard(
                     else -> "${absWatts.toInt()} W"
                 }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(CarbonElevated)
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    color = CarbonElevated,
+                    border = BorderStroke(1.dp, HairlineBorder)
                 ) {
-                    Column {
-                        Text(
-                            text = "SOC",
-                            style = MonoLabelSmall,
-                            color = SlateMuted
-                        )
-                        Text(
-                            text = "%.1f%%".format(liveSnapshot.exactSocPercent),
-                            style = MonoMetricMedium,
-                            color = ElectricEmerald,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.testTag("overview_station_soc")
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = if (liveSnapshot.isCharging) "CHARGE" else "DRAW",
-                            style = MonoLabelSmall,
-                            color = SlateMuted
-                        )
-                        Text(
-                            text = wattText,
-                            style = MonoMetricMedium,
-                            color = if (liveSnapshot.isCharging) ElectricEmerald else PrecisionCyan
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "ETA",
-                            style = MonoLabelSmall,
-                            color = SlateMuted
-                        )
-                        Text(
-                            text = formattedEta,
-                            style = MonoMetricMedium,
-                            color = PureWhite
-                        )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "SoC",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = SlateMuted
+                            )
+                            Text(
+                                text = "%.1f%%".format(liveSnapshot.exactSocPercent),
+                                style = MonoMetricMedium,
+                                color = ElectricEmerald,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.testTag("overview_station_soc")
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (liveSnapshot.isCharging) "Input" else "Output",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = SlateMuted
+                            )
+                            Text(
+                                text = wattText,
+                                style = MonoMetricMedium,
+                                color = if (liveSnapshot.isCharging) ElectricEmerald else PrecisionCyan
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "Remaining",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = SlateMuted
+                            )
+                            Text(
+                                text = formattedEta,
+                                style = MonoMetricMedium,
+                                color = PureWhite
+                            )
+                        }
                     }
                 }
             }
@@ -711,12 +708,14 @@ private fun SavedStationCard(
                 if (isConnected && liveSnapshot != null) {
                     Button(
                         onClick = onOpenDashboard,
+                        shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = ElectricEmerald,
                             contentColor = OledBlack
                         ),
                         modifier = Modifier
                             .weight(1f)
+                            .heightIn(min = 48.dp)
                             .testTag("open_station_dashboard_button")
                     ) {
                         Text(stringResource(R.string.action_open_dashboard))
@@ -729,7 +728,9 @@ private fun SavedStationCard(
                     }
                     OutlinedButton(
                         onClick = onDisconnect,
-                        border = BorderStroke(1.dp, CriticalCoral.copy(alpha = 0.6f))
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, CriticalCoral.copy(alpha = 0.6f)),
+                        modifier = Modifier.heightIn(min = 48.dp)
                     ) {
                         Text(stringResource(R.string.action_disconnect), color = CriticalCoral)
                     }
@@ -737,6 +738,7 @@ private fun SavedStationCard(
                     Button(
                         onClick = onConnect,
                         enabled = !isConnecting,
+                        shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = CarbonElevated,
                             contentColor = PureWhite
@@ -744,6 +746,7 @@ private fun SavedStationCard(
                         border = BorderStroke(1.dp, HairlineBorder),
                         modifier = Modifier
                             .weight(1f)
+                            .heightIn(min = 48.dp)
                             .testTag("connect_station_button")
                     ) {
                         Icon(
@@ -759,7 +762,9 @@ private fun SavedStationCard(
                     }
                     IconButton(
                         onClick = onRemove,
-                        modifier = Modifier.testTag("remove_station_button")
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("remove_station_button")
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.DeleteOutline,
@@ -779,38 +784,30 @@ private fun AddPowerStationCard(onClick: () -> Unit) {
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .testTag("add_power_station_button"),
-        shape = MaterialTheme.shapes.large,
-        color = CarbonSurface.copy(alpha = 0.7f),
+        shape = MaterialTheme.shapes.medium,
+        color = CarbonSurface,
         border = BorderStroke(1.dp, HairlineBorder)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                shape = CircleShape,
-                color = EmeraldDim,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = null,
-                        tint = ElectricEmerald,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(10.dp))
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = null,
+                tint = ElectricEmerald,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = stringResource(R.string.action_add_power_station),
                 style = MaterialTheme.typography.titleMedium,
-                color = PureWhite,
-                letterSpacing = 0.2.sp
+                color = PureWhite
             )
         }
     }
@@ -838,42 +835,36 @@ private fun LiveGattHandshakeCard(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                if (bleState.status == BleConnectionStatus.CONNECTING ||
+                    (bleState.status == BleConnectionStatus.CONNECTED && !hasError)
                 ) {
-                    if (bleState.status == BleConnectionStatus.CONNECTING ||
-                        (bleState.status == BleConnectionStatus.CONNECTED && !hasError)
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = PrecisionCyan
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                    }
-                    Column {
-                        Text(
-                            text = bleState.connectedDeviceName ?: "Bluetooth Power Station",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = PureWhite
-                        )
-                        Text(
-                            text = bleState.errorMessage ?: bleState.handshakeStage,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (hasError) CriticalCoral else PrecisionCyan
-                        )
-                    }
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = PrecisionCyan
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = bleState.connectedDeviceName ?: "Bluetooth Power Station",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = PureWhite
+                    )
+                    Text(
+                        text = bleState.errorMessage ?: bleState.handshakeStage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (hasError) CriticalCoral else PrecisionCyan
+                    )
                 }
             }
 
             if (bleState.discoveredServicesSummary.isNotEmpty()) {
                 Text(
-                    text = "GATT SERVICES (${bleState.discoveredServicesSummary.size}) · PACKETS: ${bleState.packetsReceivedCount}",
+                    text = "GATT services (${bleState.discoveredServicesSummary.size}) · Packets: ${bleState.packetsReceivedCount}",
                     style = MonoLabelSmall,
                     color = SlateMuted
                 )
@@ -886,7 +877,7 @@ private fun LiveGattHandshakeCard(
 
             bleState.lastRawHex?.let { hex ->
                 Text(
-                    text = "LAST FRAME HEX: $hex",
+                    text = "Last frame: $hex",
                     style = MonoLabelSmall,
                     color = ElectricEmerald
                 )
@@ -894,7 +885,7 @@ private fun LiveGattHandshakeCard(
 
             if (bleState.packetsReceivedCount == 0 && bleState.discoveredServicesSummary.isNotEmpty()) {
                 Text(
-                    text = "Connected to power station GATT. If your unit uses an encrypted/proprietary brand protocol, standard Smart BMS UART frames may not be broadcast without brand pairing.",
+                    text = "Connected to power station GATT. If your unit uses a proprietary brand protocol, standard Smart BMS telemetry frames may not be broadcast.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = SlateMuted
                 )
@@ -906,8 +897,11 @@ private fun LiveGattHandshakeCard(
             ) {
                 OutlinedButton(
                     onClick = onOpenConnectionSheet,
+                    shape = RoundedCornerShape(10.dp),
                     border = BorderStroke(1.dp, HairlineBorder),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
                 ) {
                     Text("Switch Device", color = PureWhite)
                 }
@@ -916,8 +910,11 @@ private fun LiveGattHandshakeCard(
                 ) {
                     OutlinedButton(
                         onClick = onDisconnectBle,
+                        shape = RoundedCornerShape(10.dp),
                         border = BorderStroke(1.dp, CriticalCoral),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
                     ) {
                         Text(stringResource(R.string.action_disconnect), color = CriticalCoral)
                     }

@@ -1,8 +1,8 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.NotificationsActive
-import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -29,11 +28,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -41,12 +40,12 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.ble.PowerMath
 import com.example.data.local.AlertEventEntity
 import com.example.ui.DiagnosticsUiState
-import com.example.ui.theme.AmberDim
 import com.example.ui.theme.CarbonElevated
 import com.example.ui.theme.CarbonSurface
 import com.example.ui.theme.CautionAmber
@@ -69,6 +68,33 @@ fun DiagnosticsScreen(
     uiState: DiagnosticsUiState,
     modifier: Modifier = Modifier
 ) {
+    val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val dateTimeFormatter = remember { SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()) }
+
+    val timeRangeContext = remember(uiState.recentSnapshots) {
+        val list = uiState.recentSnapshots
+        when {
+            list.isEmpty() -> null
+            list.size == 1 -> "Recorded ${dateTimeFormatter.format(Date(list.first().timestampMs))}"
+            else -> {
+                val firstMs = list.first().timestampMs
+                val lastMs = list.last().timestampMs
+                val spanHours = (lastMs - firstMs) / 3_600_000f
+                val startStr = if (spanHours >= 20f) {
+                    dateTimeFormatter.format(Date(firstMs))
+                } else {
+                    timeFormatter.format(Date(firstMs))
+                }
+                val endStr = if (spanHours >= 20f) {
+                    dateTimeFormatter.format(Date(lastMs))
+                } else {
+                    timeFormatter.format(Date(lastMs))
+                }
+                "$startStr – $endStr"
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -80,7 +106,7 @@ fun DiagnosticsScreen(
                 .widthIn(max = 880.dp)
                 .align(Alignment.TopCenter),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
                 Row(
@@ -94,17 +120,21 @@ fun DiagnosticsScreen(
                         color = PureWhite
                     )
                     Surface(
-                        shape = RoundedCornerShape(50),
-                        color = if (uiState.isOfflineCached) AmberDim else EmeraldDim
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (uiState.isOfflineCached) CarbonElevated else EmeraldDim,
+                        border = BorderStroke(
+                            1.dp,
+                            if (uiState.isOfflineCached) HairlineBorder else ElectricEmerald.copy(alpha = 0.4f)
+                        )
                     ) {
                         Text(
                             text = if (uiState.isOfflineCached) {
-                                "ROOM CACHE · ${uiState.recentSnapshots.size}"
+                                "Cached · ${uiState.recentSnapshots.size}"
                             } else {
-                                "LIVE STREAM · ${uiState.recentSnapshots.size}"
+                                "Live · ${uiState.recentSnapshots.size}"
                             },
                             style = MonoLabelSmall,
-                            color = if (uiState.isOfflineCached) CautionAmber else ElectricEmerald,
+                            color = if (uiState.isOfflineCached) SlateMuted else ElectricEmerald,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }
@@ -112,31 +142,45 @@ fun DiagnosticsScreen(
             }
 
             item {
-                Text(
-                    text = stringResource(R.string.section_trend_history),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = SlateMuted
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Trends",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = PureWhite
+                    )
+                    if (timeRangeContext != null) {
+                        Text(
+                            text = timeRangeContext,
+                            style = MonoLabelSmall,
+                            color = SlateMuted
+                        )
+                    }
+                }
             }
 
             if (uiState.recentSnapshots.isEmpty()) {
                 item {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("empty_diagnostics_history"),
                         shape = MaterialTheme.shapes.medium,
                         color = CarbonSurface,
                         border = BorderStroke(1.dp, HairlineBorder)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(18.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Timeline,
-                                contentDescription = null,
-                                tint = SlateMuted
+                            Text(
+                                text = "No telemetry history yet",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = PureWhite
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = stringResource(R.string.empty_diagnostics_history),
                                 style = MaterialTheme.typography.bodyMedium,
@@ -147,22 +191,26 @@ fun DiagnosticsScreen(
                 }
             } else {
                 item {
-                    TelemetrySparklineCard(
-                        title = "PACK VOLTAGE",
+                    TelemetryTrendCard(
+                        title = "Voltage",
                         latestFormatted = "%.2f V".format(uiState.recentSnapshots.last().voltageVolts),
                         values = uiState.recentSnapshots.map { it.voltageVolts },
                         unit = "V",
-                        lineColor = PureWhite,
+                        valueDecimals = 2,
+                        timeRangeLabel = timeRangeContext.orEmpty(),
+                        lineColor = PrecisionCyan,
                         testTag = "chart_voltage"
                     )
                 }
 
                 item {
-                    TelemetrySparklineCard(
-                        title = "CURRENT FLOW",
+                    TelemetryTrendCard(
+                        title = "Current",
                         latestFormatted = "%+.2f A".format(uiState.recentSnapshots.last().currentAmps),
                         values = uiState.recentSnapshots.map { it.currentAmps },
                         unit = "A",
+                        valueDecimals = 2,
+                        timeRangeLabel = timeRangeContext.orEmpty(),
                         lineColor = PrecisionCyan,
                         testTag = "chart_current"
                     )
@@ -172,11 +220,13 @@ fun DiagnosticsScreen(
                     val tempUnit = uiState.temperatureUnit
                     val tempSymbol = PowerMath.tempUnitSymbol(tempUnit)
                     val latestTempC = uiState.recentSnapshots.last().temperatureCelsius
-                    TelemetrySparklineCard(
-                        title = "PACK TEMPERATURE",
+                    TelemetryTrendCard(
+                        title = "Temperature",
                         latestFormatted = "${"%.1f".format(PowerMath.convertTemp(latestTempC, tempUnit))} $tempSymbol",
                         values = uiState.recentSnapshots.map { PowerMath.convertTemp(it.temperatureCelsius, tempUnit) },
                         unit = tempSymbol,
+                        valueDecimals = 1,
+                        timeRangeLabel = timeRangeContext.orEmpty(),
                         lineColor = ElectricEmerald,
                         testTag = "chart_temperature"
                     )
@@ -192,33 +242,33 @@ fun DiagnosticsScreen(
 
             item {
                 Text(
-                    text = stringResource(R.string.section_alert_log),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = SlateMuted
+                    text = "Alert log",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = PureWhite
                 )
             }
 
             if (uiState.alerts.isEmpty()) {
                 item {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("empty_alert_log"),
                         shape = MaterialTheme.shapes.medium,
                         color = CarbonSurface,
                         border = BorderStroke(1.dp, HairlineBorder)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.NotificationsActive,
-                                contentDescription = null,
-                                tint = SlateMuted,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = stringResource(R.string.empty_alert_log),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = PureWhite
+                            )
+                            Text(
+                                text = "Charge completion and battery safety alerts will appear here when triggered.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = SlateMuted
                             )
@@ -237,16 +287,19 @@ fun DiagnosticsScreen(
 }
 
 @Composable
-private fun TelemetrySparklineCard(
+private fun TelemetryTrendCard(
     title: String,
     latestFormatted: String,
     values: List<Float>,
     unit: String,
+    valueDecimals: Int,
+    timeRangeLabel: String,
     lineColor: Color,
     testTag: String
 ) {
     val minVal = values.minOrNull() ?: 0f
     val maxVal = values.maxOrNull() ?: 0f
+    val hasEnoughForTrend = values.size >= 2
 
     Surface(
         modifier = Modifier
@@ -269,53 +322,72 @@ private fun TelemetrySparklineCard(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = SlateMuted
+                    style = MaterialTheme.typography.titleMedium,
+                    color = PureWhite
                 )
                 Text(
                     text = latestFormatted,
                     style = MonoMetricMedium,
-                    color = lineColor
+                    color = PureWhite
                 )
             }
 
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(74.dp)
-            ) {
-                val range = (maxVal - minVal).takeIf { it > 0.01f } ?: 1f
-                val stepX = if (values.size > 1) size.width / (values.size - 1) else size.width
-
-                val linePath = Path()
-                val fillPath = Path()
-
-                values.forEachIndexed { idx, v ->
-                    val x = if (values.size == 1) size.width else idx * stepX
-                    val normY = ((v - minVal) / range).coerceIn(0f, 1f)
-                    val y = size.height - (normY * (size.height - 8.dp.toPx())) - 4.dp.toPx()
-
-                    if (idx == 0) {
-                        linePath.moveTo(x, y)
-                        fillPath.moveTo(x, size.height)
-                        fillPath.lineTo(x, y)
-                    } else {
-                        linePath.lineTo(x, y)
-                        fillPath.lineTo(x, y)
-                    }
-                    if (idx == values.lastIndex) {
-                        fillPath.lineTo(x, size.height)
-                        fillPath.close()
-                    }
-                }
-
-                if (values.size > 1) {
-                    drawPath(
-                        path = fillPath,
-                        brush = Brush.verticalGradient(
-                            colors = listOf(lineColor.copy(alpha = 0.22f), Color.Transparent)
-                        )
+            if (!hasEnoughForTrend) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    color = CarbonElevated,
+                    border = BorderStroke(1.dp, HairlineBorder)
+                ) {
+                    Text(
+                        text = "Not enough samples for a trend yet (${values.size} recorded). At least 2 readings are required.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = SlateMuted,
+                        modifier = Modifier.padding(12.dp)
                     )
+                }
+            } else {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(76.dp)
+                ) {
+                    val topPad = 6.dp.toPx()
+                    val bottomPad = 6.dp.toPx()
+                    val plotHeight = (size.height - topPad - bottomPad).coerceAtLeast(1f)
+
+                    // Subtle horizontal reference gridlines
+                    val gridColor = HairlineBorder.copy(alpha = 0.65f)
+                    listOf(topPad, topPad + plotHeight / 2f, topPad + plotHeight).forEach { yLine ->
+                        drawLine(
+                            color = gridColor,
+                            start = Offset(0f, yLine),
+                            end = Offset(size.width, yLine),
+                            strokeWidth = 1.dp.toPx()
+                        )
+                    }
+
+                    val span = maxVal - minVal
+                    val stepX = size.width / (values.size - 1)
+                    val linePath = Path()
+                    val points = ArrayList<Offset>(values.size)
+
+                    values.forEachIndexed { idx, v ->
+                        val x = idx * stepX
+                        val normY = if (span > 0.001f) {
+                            ((v - minVal) / span).coerceIn(0f, 1f)
+                        } else {
+                            0.5f
+                        }
+                        val y = (topPad + plotHeight) - (normY * plotHeight)
+                        points.add(Offset(x, y))
+                        if (idx == 0) {
+                            linePath.moveTo(x, y)
+                        } else {
+                            linePath.lineTo(x, y)
+                        }
+                    }
+
                     drawPath(
                         path = linePath,
                         color = lineColor,
@@ -325,31 +397,47 @@ private fun TelemetrySparklineCard(
                             join = StrokeJoin.Round
                         )
                     )
-                } else {
-                    val y = size.height / 2f
-                    drawLine(
-                        color = lineColor,
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = 2.dp.toPx()
+
+                    if (points.size <= 16) {
+                        points.forEach { pt ->
+                            drawCircle(
+                                color = lineColor,
+                                radius = 2.5.dp.toPx(),
+                                center = pt
+                            )
+                        }
+                    } else {
+                        drawCircle(
+                            color = lineColor,
+                            radius = 3.dp.toPx(),
+                            center = points.last()
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Min %.${valueDecimals}f %s".format(minVal, unit),
+                        style = MonoLabelSmall,
+                        color = SlateMuted
+                    )
+                    Text(
+                        text = timeRangeLabel,
+                        style = MonoLabelSmall,
+                        color = SlateMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "Max %.${valueDecimals}f %s".format(maxVal, unit),
+                        style = MonoLabelSmall,
+                        color = SlateMuted
                     )
                 }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "MIN ${"%.1f".format(minVal)} $unit",
-                    style = MonoLabelSmall,
-                    color = SlateMuted
-                )
-                Text(
-                    text = "MAX ${"%.1f".format(maxVal)} $unit",
-                    style = MonoLabelSmall,
-                    color = SlateMuted
-                )
             }
         }
     }
@@ -360,6 +448,7 @@ private fun CellBalanceCard(cells: List<Float>) {
     val minCell = cells.min()
     val maxCell = cells.max()
     val deltaMv = ((maxCell - minCell) * 1000f).toInt()
+    val isBalanced = deltaMv <= 50
 
     Surface(
         modifier = Modifier
@@ -381,14 +470,14 @@ private fun CellBalanceCard(cells: List<Float>) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.section_cell_balance),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = SlateMuted
+                    text = "Cell balance",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = PureWhite
                 )
                 Text(
                     text = "Δ $deltaMv mV",
                     style = MonoLabelSmall,
-                    color = if (deltaMv > 50) CautionAmber else ElectricEmerald
+                    color = if (isBalanced) ElectricEmerald else CautionAmber
                 )
             }
 
@@ -411,7 +500,7 @@ private fun CellBalanceCard(cells: List<Float>) {
                                     color = SlateMuted
                                 )
                                 Text(
-                                    text = "%.3fV".format(voltage),
+                                    text = "%.3f V".format(voltage),
                                     style = MonoLabelSmall,
                                     color = PureWhite
                                 )
@@ -423,7 +512,7 @@ private fun CellBalanceCard(cells: List<Float>) {
                                     .fillMaxWidth()
                                     .height(4.dp)
                                     .clip(RoundedCornerShape(2.dp)),
-                                color = ElectricEmerald,
+                                color = if (isBalanced) ElectricEmerald else PrecisionCyan,
                                 trackColor = CarbonElevated
                             )
                         }
