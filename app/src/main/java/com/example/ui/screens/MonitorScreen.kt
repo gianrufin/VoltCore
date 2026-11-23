@@ -62,6 +62,7 @@ import com.example.data.local.TelemetrySnapshotEntity
 import com.example.ui.ConnectionMode
 import com.example.ui.MonitorUiState
 import com.example.ui.components.HeroPowerCard
+import com.example.ui.components.MicroSuggestionsCard
 import com.example.ui.components.PluggedDevicesSection
 import com.example.ui.components.TelemetryGrid
 import com.example.ui.theme.CarbonElevated
@@ -248,6 +249,7 @@ fun MonitorScreen(
                                     detectedCellCount = uiState.settings.detectedCellCount,
                                     temperatureUnit = uiState.settings.temperatureUnit
                                 )
+                                MicroSuggestionsCard(snapshot = liveSnapshot)
                                 PluggedDevicesSection(
                                     devices = uiState.pluggedDevices,
                                     activePluggedWatts = uiState.activePluggedWatts,
@@ -290,6 +292,10 @@ fun MonitorScreen(
                             detectedCellCount = uiState.settings.detectedCellCount,
                             temperatureUnit = uiState.settings.temperatureUnit
                         )
+                    }
+
+                    item {
+                        MicroSuggestionsCard(snapshot = liveSnapshot)
                     }
 
                     item {

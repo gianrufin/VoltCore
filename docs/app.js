@@ -32,7 +32,7 @@
     }
   }
 
-  // 2. Interactive Circular Battery Gauge (matching HeroPowerCard.kt)
+  // 2. Gyro-Reactive Liquid Juice Battery Canvas with Green-to-Red Gradient
   const canvas = document.getElementById("hero-battery-canvas");
   const ctx = canvas ? canvas.getContext("2d") : null;
   const socSlider = document.getElementById("soc-slider");
@@ -57,12 +57,41 @@
   const PACK_WH = 3584;
   let targetSoc = 99.2;
   let animatedSoc = 99.2;
-  let activeMode = "discharging"; // discharging | charging | passthrough
+  let activeMode = "discharging";
   let rafId = null;
+  let tiltOffset = 0;
+  let wavePhase = 0;
 
-  function getGaugeArcColor() {
-    if (targetSoc <= 15) return "#ef4444";
-    return "#3a9bff";
+  // Gyroscope / Device Orientation & Mouse Tilt
+  window.addEventListener("deviceorientation", (e) => {
+    if (e.gamma != null) {
+      tiltOffset = Math.max(-18, Math.min(18, e.gamma)) * 0.035;
+      scheduleCanvasDraw();
+    }
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    const cx = window.innerWidth / 2;
+    tiltOffset = ((e.clientX - cx) / cx) * 0.25;
+    scheduleCanvasDraw();
+  });
+
+  function getJuiceColor(soc) {
+    if (soc >= 50) {
+      // 50% (Amber) to 100% (Emerald Green)
+      const t = (soc - 50) / 50;
+      const r = Math.round(245 + (46 - 245) * t);
+      const g = Math.round(158 + (230 - 158) * t);
+      const b = Math.round(11 + (154 - 11) * t);
+      return `rgb(${r}, ${g}, ${b})`;
+    } else {
+      // 0% (Red) to 50% (Amber)
+      const t = soc / 50;
+      const r = Math.round(239 + (245 - 239) * t);
+      const g = Math.round(68 + (158 - 68) * t);
+      const b = Math.round(68 + (11 - 68) * t);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
   }
 
   function getStateDotClass() {
@@ -168,33 +197,56 @@
     const progress = Math.max(0, Math.min(1, animatedSoc / 100));
     const cx = displaySize / 2;
     const cy = displaySize / 2;
-    const strokeW = 11;
-    const ringRadius = (displaySize - strokeW) / 2 - 4;
-    const startRad = (135 * Math.PI) / 180;
-    const totalSweep = (270 * Math.PI) / 180;
+    const strokeW = 12;
+    const radius = (displaySize / 2) - strokeW - 4;
+    const juiceColor = getJuiceColor(animatedSoc);
 
-    // Background 270 deg track
+    // Outer track ring
     ctx.beginPath();
-    ctx.arc(cx, cy, ringRadius, startRad, startRad + totalSweep);
+    ctx.arc(cx, cy, radius + strokeW / 2, 0, Math.PI * 2);
     ctx.strokeStyle = "#151820";
+    ctx.lineWidth = strokeW;
+    ctx.stroke();
+
+    // Clipped liquid container wave effect (Gyro Juice)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.clip();
+
+    const liquidTopY = cy + radius - (radius * 2 * progress);
+    ctx.beginPath();
+    ctx.moveTo(cx - radius - 20, cy + radius + 20);
+    ctx.lineTo(cx - radius - 20, liquidTopY);
+
+    const waveWidth = radius * 2.5;
+    const steps = 24;
+    for (let i = 0; i <= steps; i++) {
+      const x = (cx - radius) + (i * (waveWidth / steps));
+      const angle = (i / steps) * Math.PI * 2 + wavePhase;
+      const y = liquidTopY + Math.sin(angle) * 5 + (i - steps / 2) * tiltOffset;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(cx + radius + 20, cy + radius + 20);
+    ctx.closePath();
+
+    ctx.fillStyle = juiceColor;
+    ctx.globalAlpha = 0.82;
+    ctx.fill();
+    ctx.restore();
+
+    // Outer active progress stroke arc
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+    ctx.strokeStyle = juiceColor;
     ctx.lineWidth = strokeW;
     ctx.lineCap = "round";
     ctx.stroke();
 
-    // Active SoC arc
-    const activeSweep = totalSweep * progress;
-    if (activeSweep > 0.01) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, ringRadius, startRad, startRad + activeSweep);
-      ctx.strokeStyle = getGaugeArcColor();
-      ctx.lineWidth = strokeW;
-      ctx.lineCap = "round";
-      ctx.stroke();
-    }
-
     ctx.restore();
 
-    if (Math.abs(targetSoc - animatedSoc) >= 0.05) {
+    wavePhase += 0.045;
+    if (Math.abs(targetSoc - animatedSoc) >= 0.05 || true) {
       rafId = requestAnimationFrame(drawBatteryCanvas);
     } else {
       rafId = null;
@@ -247,7 +299,7 @@
     });
   });
 
-  // 4. App Version Sync & Live GitHub Releases API Monitor
+  // 4. App Version Sync & Live GitHub Releases API Monitor + "New Version Available" Banner
   function normalizeTag(ver) {
     const cleaned = String(ver || "").trim();
     if (!cleaned) return "v1.1.0";
@@ -330,9 +382,6 @@
 
       if (idx === 0) {
         const relTag = normalizeTag(rel.tag_name || latestMeta.tag);
-        if (compareSemver(relTag, currentAppTag) >= 0) {
-          currentAppTag = relTag;
-        }
         latestMeta.tag = relTag;
         latestMeta.latestDownloads = releaseDownloads;
         if (preferred) {
@@ -353,6 +402,15 @@
     });
 
     latestMeta.totalDownloads = totalApkDownloads;
+
+    // Check if new version is available compared to currentAppTag
+    const updateBanner = document.getElementById("update-banner");
+    const updateBannerVer = document.getElementById("update-banner-version");
+    if (compareSemver(latestMeta.tag, currentAppTag) > 0) {
+      if (updateBanner) updateBanner.hidden = false;
+      if (updateBannerVer) updateBannerVer.textContent = latestMeta.tag;
+    }
+
     updateVersionLabels(currentAppTag);
 
     const navCount = document.getElementById("nav-download-count");

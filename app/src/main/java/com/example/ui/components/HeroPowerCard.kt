@@ -31,8 +31,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -164,7 +167,9 @@ fun HeroPowerCard(
             Spacer(modifier = Modifier.height(14.dp))
 
             Box(
-                modifier = Modifier.size(184.dp),
+                modifier = Modifier
+                    .size(184.dp)
+                    .testTag("hero_liquid_battery_box"),
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(
@@ -172,28 +177,79 @@ fun HeroPowerCard(
                         .fillMaxSize()
                         .testTag("hero_liquid_battery_canvas")
                 ) {
-                    val strokeWidth = 10.dp.toPx()
-                    val pad = strokeWidth / 2f
-                    val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
-                    val topLeft = Offset(pad, pad)
+                    val strokeWidth = 12.dp.toPx()
+                    val radius = (size.minDimension / 2f) - strokeWidth
+                    val cx = size.width / 2f
+                    val cy = size.height / 2f
 
-                    drawArc(
+                    val soc = snapshot.exactSocPercent.coerceIn(0f, 100f)
+                    val progress = soc / 100f
+
+                    // Green to Amber to Red gradient color interpolation
+                    val juiceColor = when {
+                        soc >= 50f -> {
+                            val t = (soc - 50f) / 50f // 0 at 50%, 1 at 100%
+                            Color(
+                                red = 0.96f + (0.18f - 0.96f) * t,
+                                green = 0.62f + (0.90f - 0.62f) * t,
+                                blue = 0.04f + (0.60f - 0.04f) * t
+                            )
+                        }
+                        else -> {
+                            val t = soc / 50f // 0 at 0%, 1 at 50%
+                            Color(
+                                red = 0.94f + (0.96f - 0.94f) * t,
+                                green = 0.27f + (0.62f - 0.27f) * t,
+                                blue = 0.27f + (0.04f - 0.27f) * t
+                            )
+                        }
+                    }
+
+                    // Outer track ring
+                    drawCircle(
                         color = CarbonElevated,
-                        startAngle = 135f,
-                        sweepAngle = 270f,
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        radius = radius + strokeWidth / 2f,
+                        center = Offset(cx, cy),
+                        style = Stroke(width = strokeWidth)
                     )
 
+                    // Clipped liquid container
+                    clipPath(
+                        path = Path().apply {
+                            addOval(androidx.compose.ui.geometry.Rect(cx - radius, cy - radius, cx + radius, cy + radius))
+                        }
+                    ) {
+                        val liquidTopY = cy + radius - (radius * 2f * animatedProgress)
+                        val wavePath = Path().apply {
+                            moveTo(cx - radius - 20f, cy + radius + 20f)
+                            lineTo(cx - radius - 20f, liquidTopY)
+                            // Sine wave with dynamic tilt
+                            val waveWidth = radius * 2.5f
+                            val steps = 20
+                            for (i in 0..steps) {
+                                val x = (cx - radius) + (i * (waveWidth / steps))
+                                val angle = (i.toFloat() / steps) * (Math.PI.toFloat() * 2f) + (System.currentTimeMillis() * 0.003f)
+                                val y = liquidTopY + kotlin.math.sin(angle) * 6f
+                                lineTo(x, y)
+                            }
+                            lineTo(cx + radius + 20f, cy + radius + 20f)
+                            close()
+                        }
+
+                        drawPath(
+                            path = wavePath,
+                            color = juiceColor.copy(alpha = 0.85f)
+                        )
+                    }
+
+                    // Outer active progress stroke arc
                     drawArc(
-                        color = gaugeArcColor,
-                        startAngle = 135f,
-                        sweepAngle = 270f * animatedProgress,
+                        color = juiceColor,
+                        startAngle = -90f,
+                        sweepAngle = 360f * animatedProgress,
                         useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
+                        topLeft = Offset(cx - radius, cy - radius),
+                        size = Size(radius * 2f, radius * 2f),
                         style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                     )
                 }
