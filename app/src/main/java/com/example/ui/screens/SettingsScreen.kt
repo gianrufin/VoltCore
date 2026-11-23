@@ -621,11 +621,30 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.titleLarge,
                                 color = PureWhite
                             )
-                            Text(
-                                text = "v${BuildConfig.VERSION_NAME}",
-                                style = MonoLabelSmall,
-                                color = PrecisionCyan
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (uiState.updateCheckResult is UpdateCheckResult.UpdateAvailable) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = EmeraldDim,
+                                        border = BorderStroke(1.dp, ElectricEmerald.copy(alpha = 0.5f))
+                                    ) {
+                                        Text(
+                                            text = "New version available",
+                                            style = MonoLabelSmall,
+                                            color = ElectricEmerald,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "v${BuildConfig.VERSION_NAME}",
+                                    style = MonoLabelSmall,
+                                    color = PrecisionCyan
+                                )
+                            }
                         }
 
                         OutlinedTextField(
@@ -731,6 +750,20 @@ fun SettingsScreen(
                                                     )
                                                     LinearProgressIndicator(
                                                         progress = { installState.progressPercent / 100f },
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        color = ElectricEmerald,
+                                                        trackColor = CarbonElevated
+                                                    )
+                                                }
+                                            }
+                                            is ApkInstallState.Installing -> {
+                                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Text(
+                                                        text = installState.statusMessage,
+                                                        style = MonoLabelSmall,
+                                                        color = ElectricEmerald
+                                                    )
+                                                    LinearProgressIndicator(
                                                         modifier = Modifier.fillMaxWidth(),
                                                         color = ElectricEmerald,
                                                         trackColor = CarbonElevated

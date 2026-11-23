@@ -217,6 +217,15 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun `exact decimal wattage formats V x A accurately`() {
+        val watts = 13.20f * -3.50f
+        assertEquals("46.2 W", PowerMath.formatWatts(watts, signed = false))
+        assertEquals("-46.2 W", PowerMath.formatWatts(watts, signed = true))
+        assertEquals("+340.0 W", PowerMath.formatWatts(340f, signed = true))
+        assertEquals("0.0 W", PowerMath.formatWatts(0.02f, signed = true))
+    }
+
+    @Test
     fun `daly 0x90 and jbd resolve exact one-decimal socPercent accurately`() {
         // Daly 0x90 encodes SoC in 0.1% increments: 803 = 80.3%, 906 = 90.6%
         val soc803 = byteArrayOf(

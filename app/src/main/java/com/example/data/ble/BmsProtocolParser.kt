@@ -214,6 +214,19 @@ object PowerMath {
         val num = "%.${decimals}f".format(converted)
         return "$num${tempUnitSymbol(unit)}"
     }
+
+    /**
+     * Formats instantaneous shunt wattage with exact 0.1 W resolution from Voltage x Current.
+     */
+    fun formatWatts(watts: Float, signed: Boolean = false): String {
+        val absW = abs(watts)
+        if (absW < 0.05f) return "0.0 W"
+        return when {
+            signed && watts > 0f -> "+%.1f W".format(absW)
+            signed && watts < 0f -> "-%.1f W".format(absW)
+            else -> "%.1f W".format(absW)
+        }
+    }
 }
 
 object BmsProtocolParser {

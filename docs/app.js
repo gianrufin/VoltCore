@@ -2,7 +2,7 @@
   const cfg = window.VOLTCORE_CONFIG || {
     githubOwner: "gianrufin",
     githubRepo: "VoltCore",
-    appVersion: "1.1.0",
+    appVersion: "1.2.0",
     gaMeasurementId: "G-XXXXXXXXXX",
     pagesUrl: "https://gianrufin.github.io/VoltCore/"
   };
@@ -60,19 +60,21 @@
   let activeMode = "discharging";
   let rafId = null;
   let tiltOffset = 0;
+  let smoothedTilt = 0;
   let wavePhase = 0;
+  let lastFrameTs = 0;
 
   // Gyroscope / Device Orientation & Mouse Tilt
   window.addEventListener("deviceorientation", (e) => {
     if (e.gamma != null) {
-      tiltOffset = Math.max(-18, Math.min(18, e.gamma)) * 0.035;
+      tiltOffset = Math.max(-22, Math.min(22, e.gamma)) * 0.032;
       scheduleCanvasDraw();
     }
   });
 
   window.addEventListener("mousemove", (e) => {
     const cx = window.innerWidth / 2;
-    tiltOffset = ((e.clientX - cx) / cx) * 0.25;
+    tiltOffset = ((e.clientX - cx) / cx) * 0.28;
     scheduleCanvasDraw();
   });
 
@@ -83,14 +85,14 @@
       const r = Math.round(245 + (46 - 245) * t);
       const g = Math.round(158 + (230 - 158) * t);
       const b = Math.round(11 + (154 - 11) * t);
-      return `rgb(${r}, ${g}, ${b})`;
+      return { r, g, b, css: `rgb(${r}, ${g}, ${b})` };
     } else {
       // 0% (Red) to 50% (Amber)
       const t = soc / 50;
       const r = Math.round(239 + (245 - 239) * t);
       const g = Math.round(68 + (158 - 68) * t);
       const b = Math.round(68 + (11 - 68) * t);
-      return `rgb(${r}, ${g}, ${b})`;
+      return { r, g, b, css: `rgb(${r}, ${g}, ${b})` };
     }
   }
 
@@ -121,7 +123,7 @@
       if (modeLabelEl) modeLabelEl.textContent = "Discharging";
       if (powerLabelEl) powerLabelEl.textContent = "Output";
       if (powerValueEl) {
-        powerValueEl.textContent = "46 W";
+        powerValueEl.textContent = "46.2 W";
         powerValueEl.className = "summary-val mono text-blue";
       }
       if (etaLabelEl) etaLabelEl.textContent = "Est. remaining";
@@ -138,7 +140,7 @@
       if (modeLabelEl) modeLabelEl.textContent = "Charging";
       if (powerLabelEl) powerLabelEl.textContent = "Input";
       if (powerValueEl) {
-        powerValueEl.textContent = "+340 W";
+        powerValueEl.textContent = "+340.0 W";
         powerValueEl.className = "summary-val mono text-mint";
       }
       if (etaLabelEl) etaLabelEl.textContent = "To full";
@@ -155,7 +157,7 @@
       if (modeLabelEl) modeLabelEl.textContent = "Pass-through";
       if (powerLabelEl) powerLabelEl.textContent = "Input";
       if (powerValueEl) {
-        powerValueEl.textContent = "+340 W";
+        powerValueEl.textContent = "+340.0 W";
         powerValueEl.className = "summary-val mono text-mint";
       }
       if (etaLabelEl) etaLabelEl.textContent = "To full";
@@ -164,9 +166,9 @@
         etaReadoutEl.textContent = missingWh <= 1 ? "Full" : formatHours(missingWh / 340);
       }
       if (passthroughBarEl) passthroughBarEl.hidden = false;
-      if (grossInEl) grossInEl.textContent = "+400 W";
-      if (packNetEl) packNetEl.textContent = "+340 W";
-      if (loadOutEl) loadOutEl.textContent = "60 W";
+      if (grossInEl) grossInEl.textContent = "+400.0 W";
+      if (packNetEl) packNetEl.textContent = "+340.0 W";
+      if (loadOutEl) loadOutEl.textContent = "60.0 W";
       if (voltageEl) voltageEl.textContent = "13.42";
       if (currentEl) currentEl.textContent = "+25.33";
       if (currentUnitEl) currentUnitEl.className = "metric-unit text-mint";
@@ -174,10 +176,14 @@
     }
   }
 
-  function drawBatteryCanvas() {
+  function drawBatteryCanvas(timestamp) {
     if (!ctx || !canvas) return;
+    const now = typeof timestamp === "number" ? timestamp : performance.now();
+    const dt = lastFrameTs ? Math.min(0.05, (now - lastFrameTs) / 1000) : 0.016;
+    lastFrameTs = now;
+
     const dpr = window.devicePixelRatio || 1;
-    const displaySize = 210;
+    const displaySize = 216;
     if (canvas.width !== displaySize * dpr) {
       canvas.width = displaySize * dpr;
       canvas.height = displaySize * dpr;
@@ -191,66 +197,86 @@
     if (Math.abs(diff) < 0.05) {
       animatedSoc = targetSoc;
     } else {
-      animatedSoc += diff * 0.16;
+      animatedSoc += diff * Math.min(1, dt * 10);
     }
+    smoothedTilt += (tiltOffset - smoothedTilt) * Math.min(1, dt * 8);
 
     const progress = Math.max(0, Math.min(1, animatedSoc / 100));
     const cx = displaySize / 2;
     const cy = displaySize / 2;
-    const strokeW = 12;
-    const radius = (displaySize / 2) - strokeW - 4;
-    const juiceColor = getJuiceColor(animatedSoc);
+    const strokeW = 11;
+    const outerRadius = (displaySize / 2) - strokeW;
+    const liquidRadius = outerRadius - (strokeW / 2) - 2;
+    const juice = getJuiceColor(animatedSoc);
 
     // Outer track ring
     ctx.beginPath();
-    ctx.arc(cx, cy, radius + strokeW / 2, 0, Math.PI * 2);
+    ctx.arc(cx, cy, outerRadius, 0, Math.PI * 2);
     ctx.strokeStyle = "#151820";
     ctx.lineWidth = strokeW;
     ctx.stroke();
 
-    // Clipped liquid container wave effect (Gyro Juice)
+    // Inner cavity
+    ctx.beginPath();
+    ctx.arc(cx, cy, liquidRadius, 0, Math.PI * 2);
+    ctx.fillStyle = "#000000";
+    ctx.fill();
+
+    // Clipped dual-layer 60fps liquid wave effect
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.arc(cx, cy, liquidRadius, 0, Math.PI * 2);
     ctx.clip();
 
-    const liquidTopY = cy + radius - (radius * 2 * progress);
-    ctx.beginPath();
-    ctx.moveTo(cx - radius - 20, cy + radius + 20);
-    ctx.lineTo(cx - radius - 20, liquidTopY);
+    const liquidTopY = cy + liquidRadius - (liquidRadius * 2 * progress);
+    const waveAmp = (progress <= 0.02 || progress >= 0.985) ? 2 : 5.5;
+    const steps = 36;
+    const startX = cx - liquidRadius - 12;
+    const spanW = (liquidRadius * 2) + 24;
 
-    const waveWidth = radius * 2.5;
-    const steps = 24;
+    // Back wave
+    ctx.beginPath();
+    ctx.moveTo(startX, cy + liquidRadius + 24);
     for (let i = 0; i <= steps; i++) {
-      const x = (cx - radius) + (i * (waveWidth / steps));
-      const angle = (i / steps) * Math.PI * 2 + wavePhase;
-      const y = liquidTopY + Math.sin(angle) * 5 + (i - steps / 2) * tiltOffset;
+      const x = startX + (i / steps) * spanW;
+      const dx = x - cx;
+      const angle = (i / steps) * Math.PI * 2 - wavePhase * 0.78;
+      const y = liquidTopY + (dx * smoothedTilt) + Math.sin(angle) * (waveAmp * 0.8);
       ctx.lineTo(x, y);
     }
-    ctx.lineTo(cx + radius + 20, cy + radius + 20);
+    ctx.lineTo(startX + spanW, cy + liquidRadius + 24);
     ctx.closePath();
+    ctx.fillStyle = `rgba(${juice.r}, ${juice.g}, ${juice.b}, 0.42)`;
+    ctx.fill();
 
-    ctx.fillStyle = juiceColor;
-    ctx.globalAlpha = 0.82;
+    // Front wave
+    ctx.beginPath();
+    ctx.moveTo(startX, cy + liquidRadius + 24);
+    for (let i = 0; i <= steps; i++) {
+      const x = startX + (i / steps) * spanW;
+      const dx = x - cx;
+      const angle = (i / steps) * Math.PI * 2.2 + wavePhase;
+      const y = liquidTopY + (dx * smoothedTilt) + Math.sin(angle) * waveAmp;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(startX + spanW, cy + liquidRadius + 24);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${juice.r}, ${juice.g}, ${juice.b}, 0.92)`;
     ctx.fill();
     ctx.restore();
 
     // Outer active progress stroke arc
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
-    ctx.strokeStyle = juiceColor;
+    ctx.arc(cx, cy, outerRadius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+    ctx.strokeStyle = juice.css;
     ctx.lineWidth = strokeW;
     ctx.lineCap = "round";
     ctx.stroke();
 
     ctx.restore();
 
-    wavePhase += 0.045;
-    if (Math.abs(targetSoc - animatedSoc) >= 0.05 || true) {
-      rafId = requestAnimationFrame(drawBatteryCanvas);
-    } else {
-      rafId = null;
-    }
+    wavePhase = (wavePhase + dt * 2.9) % (Math.PI * 2);
+    rafId = requestAnimationFrame(drawBatteryCanvas);
   }
 
   function scheduleCanvasDraw() {
@@ -302,7 +328,7 @@
   // 4. App Version Sync & Live GitHub Releases API Monitor + "New Version Available" Banner
   function normalizeTag(ver) {
     const cleaned = String(ver || "").trim();
-    if (!cleaned) return "v1.1.0";
+    if (!cleaned) return "v1.2.0";
     return cleaned.startsWith("v") ? cleaned : `v${cleaned}`;
   }
 
@@ -330,14 +356,15 @@
       "hero-latest-tag",
       "screens-version-label",
       "settings-mock-version",
-      "settings-card-version"
+      "settings-card-version",
+      "update-banner-version"
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.textContent = formattedTag;
     });
   }
 
-  let currentAppTag = normalizeTag(cfg.appVersion || "1.1.0");
+  let currentAppTag = normalizeTag(cfg.appVersion || "1.2.0");
   updateVersionLabels(currentAppTag);
 
   const CACHE_KEY = `voltcore_releases_${cfg.githubOwner}_${cfg.githubRepo}`;
@@ -403,10 +430,10 @@
 
     latestMeta.totalDownloads = totalApkDownloads;
 
-    // Check if new version is available compared to currentAppTag
+    // Always keep "New version is available" banner synced with latest release (including current release)
     const updateBanner = document.getElementById("update-banner");
     const updateBannerVer = document.getElementById("update-banner-version");
-    if (compareSemver(latestMeta.tag, currentAppTag) > 0) {
+    if (compareSemver(latestMeta.tag, currentAppTag) >= 0) {
       if (updateBanner) updateBanner.hidden = false;
       if (updateBannerVer) updateBannerVer.textContent = latestMeta.tag;
     }

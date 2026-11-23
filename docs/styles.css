@@ -365,8 +365,8 @@ body {
 
 .gauge-wrap {
   position: relative;
-  width: 210px;
-  height: 210px;
+  width: 216px;
+  height: 216px;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -374,20 +374,30 @@ body {
 }
 
 #hero-battery-canvas {
-  width: 210px;
-  height: 210px;
+  width: 216px;
+  height: 216px;
   display: block;
 }
 
-.gauge-overlay {
+.gauge-center-disc {
   position: absolute;
-  inset: 0;
+  width: 142px;
+  height: 142px;
+  border-radius: 50%;
+  background: var(--bg-black);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.gauge-overlay {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
-  padding: 0 18px;
+  padding: 0 10px;
   text-align: center;
 }
 
@@ -398,30 +408,30 @@ body {
 }
 
 .soc-digits {
-  font-weight: 700;
-  font-size: 2.85rem;
+  font-weight: 800;
+  font-size: 2.45rem;
   letter-spacing: -0.04em;
   color: var(--text-primary);
 }
 
 .soc-pct {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
   margin-left: 2px;
 }
 
 .pack-name {
   margin-top: 4px;
-  font-size: 0.84rem;
-  font-weight: 500;
+  font-size: 0.78rem;
+  font-weight: 600;
   color: var(--text-muted);
 }
 
 .pack-spec {
   margin-top: 2px;
-  font-size: 0.72rem;
-  color: var(--text-subtle);
+  font-size: 0.68rem;
+  color: var(--text-muted);
 }
 
 .summary-bar {
@@ -737,8 +747,8 @@ body {
 
 .mock-arc-gauge {
   position: relative;
-  width: 126px;
-  height: 126px;
+  width: 128px;
+  height: 128px;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -746,30 +756,37 @@ body {
 }
 
 .mock-arc-svg {
-  width: 126px;
-  height: 126px;
+  width: 128px;
+  height: 128px;
   display: block;
 }
 
-.mock-arc-center {
+.mock-arc-disc {
   position: absolute;
-  inset: 0;
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  background: var(--bg-black);
+  border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
+  padding: 0 6px;
 }
 
 .mock-soc {
-  font-size: 1.45rem;
-  font-weight: 700;
+  font-size: 1.28rem;
+  font-weight: 800;
   line-height: 1;
+  color: var(--text-primary);
 }
 
 .mock-soc span {
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .muted-sm { font-size: 0.74rem; color: var(--text-muted); }
@@ -821,26 +838,36 @@ body {
   font-size: 0.86rem;
 }
 
-.mock-loads-row {
+.mock-tip-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mock-power-flow {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 9px 10px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .loads-title {
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
 .section-sub-title {
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
 }
 

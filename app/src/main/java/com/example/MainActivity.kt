@@ -38,6 +38,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
@@ -45,6 +46,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -124,6 +128,19 @@ fun VoltCoreApp(
     val diagnosticsState by viewModel.diagnosticsUiState.collectAsStateWithLifecycle()
     val settingsState by viewModel.settingsUiState.collectAsStateWithLifecycle()
     val isSheetOpen by viewModel.isConnectionSheetOpen.collectAsStateWithLifecycle()
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.onAppResumed()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val blePermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -263,11 +280,15 @@ fun VoltCoreApp(
                                 onRemoveSavedStation = { address ->
                                     viewModel.removeSavedStation(address)
                                 },
-                                onSavePluggedDevice = { id, name, port, watts ->
-                                    viewModel.savePluggedDevice(id, name, port, watts)
-                                },
-                                onTogglePluggedDevice = { viewModel.togglePluggedDevice(it) },
-                                onDeletePluggedDevice = { viewModel.deletePluggedDevice(it) }
+                                onOpenUpdates = {
+                                    navController.navigate(ROUTE_SETTINGS) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
                             )
                         }
 

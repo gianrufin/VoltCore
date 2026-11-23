@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -46,7 +47,8 @@ data class MonitorUiState(
     val activePluggedWatts: Float = 0f,
     val passThroughFlow: PassThroughFlow = PassThroughFlow(),
     val bleState: BleUiState = BleUiState(),
-    val settings: AppSettings = AppSettings()
+    val settings: AppSettings = AppSettings(),
+    val updateCheckResult: UpdateCheckResult = UpdateCheckResult.Idle
 )
 
 data class DiagnosticsUiState(
@@ -107,12 +109,29 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
         }
+
+        // Silent startup release check so Monitor & Settings show "New version available" automatically
+        viewModelScope.launch {
+            val slug = repository.settingsFlow.first().githubRepoSlug
+            if (slug.isNotBlank()) {
+                val res = repository.checkGitHubRelease(slug)
+                if (res is UpdateCheckResult.UpdateAvailable || res is UpdateCheckResult.UpToDate) {
+                    _updateCheckResult.value = res
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        apkUpdateInstaller.unregisterActiveReceiver()
+        super.onCleared()
     }
 
     private val stationHubFlow = combine(
         repository.savedStationsFlow,
-        _isDashboardOpen
-    ) { stations, dashboardOpen -> stations to dashboardOpen }
+        _isDashboardOpen,
+        _updateCheckResult
+    ) { stations, dashboardOpen, updateResult -> Triple(stations, dashboardOpen, updateResult) }
 
     val monitorUiState: StateFlow<MonitorUiState> = combine(
         repository.liveSnapshotFlow,
@@ -120,7 +139,7 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         repository.bleStateFlow,
         repository.settingsFlow,
         stationHubFlow
-    ) { liveSnapshot, devices, ble, settings, (stations, dashboardOpen) ->
+    ) { liveSnapshot, devices, ble, settings, (stations, dashboardOpen, updateResult) ->
         val isLiveConnected = ble.status == BleConnectionStatus.CONNECTED
         val activeSnapshot = if (isLiveConnected) liveSnapshot else null
 
@@ -168,7 +187,8 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
             activePluggedWatts = activeDeviceWatts,
             passThroughFlow = passThroughFlow,
             bleState = ble,
-            settings = settings
+            settings = settings,
+            updateCheckResult = updateResult
         )
     }.stateIn(
         scope = viewModelScope,
@@ -365,6 +385,14 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun onAppResumed() {
+        refreshPermissions()
+        val state = _apkInstallState.value
+        if (state is ApkInstallState.NeedsInstallPermission && apkUpdateInstaller.canInstallPackages()) {
+            retryPendingApkInstall()
+        }
+    }
+
     fun checkForUpdates(repoSlug: String) {
         viewModelScope.launch {
             repository.preferences.updateGithubRepoSlug(repoSlug)
@@ -382,11 +410,11 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
             }
             _apkInstallState.value = result
             if (result is ApkInstallState.ReadyToInstall) {
-                if (!apkUpdateInstaller.launchApkInstaller(result.apkFile)) {
-                    _apkInstallState.value = ApkInstallState.Error(
-                        message = "Unable to open Android package installer.",
-                        fallbackUrl = downloadUrl
-                    )
+                apkUpdateInstaller.installApkWithSession(
+                    apkFile = result.apkFile,
+                    fallbackUrl = downloadUrl
+                ) { nextState ->
+                    _apkInstallState.value = nextState
                 }
             }
         }
@@ -396,17 +424,29 @@ class VoltCoreViewModel(application: Application) : AndroidViewModel(application
         when (val state = _apkInstallState.value) {
             is ApkInstallState.NeedsInstallPermission -> {
                 if (apkUpdateInstaller.canInstallPackages()) {
-                    _apkInstallState.value = ApkInstallState.ReadyToInstall(state.apkFile)
-                    apkUpdateInstaller.launchApkInstaller(state.apkFile)
+                    apkUpdateInstaller.installApkWithSession(
+                        apkFile = state.apkFile,
+                        fallbackUrl = state.fallbackUrl
+                    ) { nextState ->
+                        _apkInstallState.value = nextState
+                    }
                 } else {
                     apkUpdateInstaller.launchInstallUnknownAppsSettings()
                 }
             }
             is ApkInstallState.ReadyToInstall -> {
                 if (apkUpdateInstaller.canInstallPackages()) {
-                    apkUpdateInstaller.launchApkInstaller(state.apkFile)
+                    apkUpdateInstaller.installApkWithSession(
+                        apkFile = state.apkFile,
+                        fallbackUrl = state.fallbackUrl
+                    ) { nextState ->
+                        _apkInstallState.value = nextState
+                    }
                 } else {
-                    _apkInstallState.value = ApkInstallState.NeedsInstallPermission(state.apkFile)
+                    _apkInstallState.value = ApkInstallState.NeedsInstallPermission(
+                        apkFile = state.apkFile,
+                        fallbackUrl = state.fallbackUrl
+                    )
                     apkUpdateInstaller.launchInstallUnknownAppsSettings()
                 }
             }

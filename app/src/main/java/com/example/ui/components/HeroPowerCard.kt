@@ -1,5 +1,10 @@
 package com.example.ui.components
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -25,25 +30,35 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.ble.PassThroughFlow
+import com.example.data.ble.PowerMath
 import com.example.data.local.TelemetrySnapshotEntity
 import com.example.data.prefs.DisplayDensity
 import com.example.ui.theme.CarbonElevated
@@ -57,11 +72,15 @@ import com.example.ui.theme.HairlineBorder
 import com.example.ui.theme.HeroSocTextStyle
 import com.example.ui.theme.MonoLabelSmall
 import com.example.ui.theme.MonoMetricMedium
+import com.example.ui.theme.OledBlack
 import com.example.ui.theme.PrecisionCyan
 import com.example.ui.theme.PureWhite
 import com.example.ui.theme.SlateMuted
-import com.example.ui.theme.SubtleText
+import kotlinx.coroutines.isActive
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.sin
+import kotlin.math.tan
 
 @Composable
 fun HeroPowerCard(
@@ -76,9 +95,11 @@ fun HeroPowerCard(
     displayDensity: DisplayDensity = DisplayDensity.MINIMAL,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val isCharging = snapshot.isCharging
-    val absWatts = abs(snapshot.powerWatts)
-    val isStandby = absWatts < 1.5f
+    val exactWatts = snapshot.voltageVolts * snapshot.currentAmps
+    val absWatts = abs(exactWatts)
+    val isStandby = absWatts < 0.2f
     val isPassThrough = passThroughFlow.isPassThroughActive
 
     val hasWarning = snapshot.exactSocPercent <= 15f || snapshot.temperatureCelsius >= 45f
@@ -93,20 +114,51 @@ fun HeroPowerCard(
         label = "stateAccent"
     )
 
-    val gaugeArcColor by animateColorAsState(
-        targetValue = when {
-            snapshot.exactSocPercent <= 15f -> CriticalCoral
-            snapshot.temperatureCelsius >= 45f -> CautionAmber
-            else -> PrecisionCyan
-        },
-        label = "gaugeArcColor"
-    )
-
     val animatedProgress by animateFloatAsState(
         targetValue = (snapshot.exactSocPercent / 100f).coerceIn(0f, 1f),
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "socProgress"
     )
+
+    // Continuous 60fps wave phase loop
+    var wavePhase by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        var lastNanos = 0L
+        while (isActive) {
+            withFrameNanos { frameNanos ->
+                if (lastNanos != 0L) {
+                    val dt = ((frameNanos - lastNanos) / 1_000_000_000f).coerceIn(0f, 0.05f)
+                    wavePhase = (wavePhase + dt * 2.9f) % (2f * PI.toFloat())
+                }
+                lastNanos = frameNanos
+            }
+        }
+    }
+
+    // Gyro / gravity / accelerometer fluid horizon tilt with low-pass smoothing
+    var tiltRadians by remember { mutableFloatStateOf(0f) }
+    DisposableEffect(context) {
+        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val sensor = sensorManager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
+            ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        if (sensorManager == null || sensor == null) {
+            onDispose {}
+        } else {
+            var filteredX = 0f
+            val listener = object : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent) {
+                    filteredX += 0.14f * (event.values[0] - filteredX)
+                    tiltRadians = (-filteredX / 9.81f * 0.44f).coerceIn(-0.36f, 0.36f)
+                }
+
+                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+            }
+            sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+            onDispose {
+                sensorManager.unregisterListener(listener)
+            }
+        }
+    }
 
     val specSummary = buildString {
         if (detectedCellCount > 0) append("${detectedCellCount}S · ")
@@ -119,6 +171,12 @@ fun HeroPowerCard(
         isCharging -> "Charging"
         isStandby -> "Standby"
         else -> "Discharging"
+    }
+
+    val wattageDisplay = when {
+        isStandby -> "0.0 W"
+        isCharging -> "+${PowerMath.formatWatts(absWatts)}"
+        else -> PowerMath.formatWatts(absWatts)
     }
 
     Surface(
@@ -168,7 +226,7 @@ fun HeroPowerCard(
 
             Box(
                 modifier = Modifier
-                    .size(184.dp)
+                    .size(212.dp)
                     .testTag("hero_liquid_battery_box"),
                 contentAlignment = Alignment.Center
             ) {
@@ -177,18 +235,18 @@ fun HeroPowerCard(
                         .fillMaxSize()
                         .testTag("hero_liquid_battery_canvas")
                 ) {
-                    val strokeWidth = 12.dp.toPx()
-                    val radius = (size.minDimension / 2f) - strokeWidth
+                    val strokeWidth = 11.dp.toPx()
+                    val outerRadius = (size.minDimension / 2f) - strokeWidth
+                    val liquidRadius = outerRadius - (strokeWidth / 2f) - 2.dp.toPx()
                     val cx = size.width / 2f
                     val cy = size.height / 2f
 
-                    val soc = snapshot.exactSocPercent.coerceIn(0f, 100f)
-                    val progress = soc / 100f
+                    val soc = (animatedProgress * 100f).coerceIn(0f, 100f)
 
-                    // Green to Amber to Red gradient color interpolation
+                    // Smooth Green (100%) -> Amber (50%) -> Red (0%) interpolation
                     val juiceColor = when {
                         soc >= 50f -> {
-                            val t = (soc - 50f) / 50f // 0 at 50%, 1 at 100%
+                            val t = (soc - 50f) / 50f
                             Color(
                                 red = 0.96f + (0.18f - 0.96f) * t,
                                 green = 0.62f + (0.90f - 0.62f) * t,
@@ -196,7 +254,7 @@ fun HeroPowerCard(
                             )
                         }
                         else -> {
-                            val t = soc / 50f // 0 at 0%, 1 at 50%
+                            val t = soc / 50f
                             Color(
                                 red = 0.94f + (0.96f - 0.94f) * t,
                                 green = 0.27f + (0.62f - 0.27f) * t,
@@ -205,92 +263,140 @@ fun HeroPowerCard(
                         }
                     }
 
-                    // Outer track ring
+                    // Outer dark track ring
                     drawCircle(
                         color = CarbonElevated,
-                        radius = radius + strokeWidth / 2f,
+                        radius = outerRadius,
                         center = Offset(cx, cy),
                         style = Stroke(width = strokeWidth)
                     )
 
-                    // Clipped liquid container
+                    // Liquid interior cavity background
+                    drawCircle(
+                        color = OledBlack,
+                        radius = liquidRadius,
+                        center = Offset(cx, cy)
+                    )
+
+                    // Clipped 60fps fluid wave with gyroscopic tilt
                     clipPath(
                         path = Path().apply {
-                            addOval(androidx.compose.ui.geometry.Rect(cx - radius, cy - radius, cx + radius, cy + radius))
+                            addOval(
+                                Rect(
+                                    cx - liquidRadius,
+                                    cy - liquidRadius,
+                                    cx + liquidRadius,
+                                    cy + liquidRadius
+                                )
+                            )
                         }
                     ) {
-                        val liquidTopY = cy + radius - (radius * 2f * animatedProgress)
-                        val wavePath = Path().apply {
-                            moveTo(cx - radius - 20f, cy + radius + 20f)
-                            lineTo(cx - radius - 20f, liquidTopY)
-                            // Sine wave with dynamic tilt
-                            val waveWidth = radius * 2.5f
-                            val steps = 20
-                            for (i in 0..steps) {
-                                val x = (cx - radius) + (i * (waveWidth / steps))
-                                val angle = (i.toFloat() / steps) * (Math.PI.toFloat() * 2f) + (System.currentTimeMillis() * 0.003f)
-                                val y = liquidTopY + kotlin.math.sin(angle) * 6f
+                        val baseLevelY = cy + liquidRadius - (liquidRadius * 2f * animatedProgress)
+                        val waveAmplitude = when {
+                            animatedProgress <= 0.02f || animatedProgress >= 0.985f -> 2.dp.toPx()
+                            else -> 5.5.dp.toPx()
+                        }
+                        val tiltSlope = tan(tiltRadians)
+                        val stepCount = 36
+                        val startX = cx - liquidRadius - 12f
+                        val spanW = (liquidRadius * 2f) + 24f
+
+                        // Secondary back wave for subtle depth
+                        val backWave = Path().apply {
+                            moveTo(startX, cy + liquidRadius + 24f)
+                            for (i in 0..stepCount) {
+                                val x = startX + (i.toFloat() / stepCount) * spanW
+                                val dx = x - cx
+                                val angle = (i.toFloat() / stepCount) * (2f * PI.toFloat()) - (wavePhase * 0.78f)
+                                val y = baseLevelY + (dx * tiltSlope) + sin(angle) * (waveAmplitude * 0.8f)
                                 lineTo(x, y)
                             }
-                            lineTo(cx + radius + 20f, cy + radius + 20f)
+                            lineTo(startX + spanW, cy + liquidRadius + 24f)
                             close()
                         }
+                        drawPath(path = backWave, color = juiceColor.copy(alpha = 0.42f))
 
-                        drawPath(
-                            path = wavePath,
-                            color = juiceColor.copy(alpha = 0.85f)
-                        )
+                        // Primary front wave
+                        val frontWave = Path().apply {
+                            moveTo(startX, cy + liquidRadius + 24f)
+                            for (i in 0..stepCount) {
+                                val x = startX + (i.toFloat() / stepCount) * spanW
+                                val dx = x - cx
+                                val angle = (i.toFloat() / stepCount) * (2.2f * PI.toFloat()) + wavePhase
+                                val y = baseLevelY + (dx * tiltSlope) + sin(angle) * waveAmplitude
+                                lineTo(x, y)
+                            }
+                            lineTo(startX + spanW, cy + liquidRadius + 24f)
+                            close()
+                        }
+                        drawPath(path = frontWave, color = juiceColor.copy(alpha = 0.92f))
                     }
 
-                    // Outer active progress stroke arc
+                    // Outer active progress arc
                     drawArc(
                         color = juiceColor,
                         startAngle = -90f,
                         sweepAngle = 360f * animatedProgress,
                         useCenter = false,
-                        topLeft = Offset(cx - radius, cy - radius),
-                        size = Size(radius * 2f, radius * 2f),
+                        topLeft = Offset(cx - outerRadius, cy - outerRadius),
+                        size = Size(outerRadius * 2f, outerRadius * 2f),
                         style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                     )
                 }
 
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(horizontal = 20.dp)
+                // High-contrast dark center backdrop disc behind bold SoC readout
+                Surface(
+                    modifier = Modifier
+                        .size(142.dp)
+                        .testTag("hero_center_contrast_disc"),
+                    shape = CircleShape,
+                    color = OledBlack,
+                    border = BorderStroke(1.dp, HairlineBorder)
                 ) {
-                    Row(verticalAlignment = Alignment.Bottom) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                text = "%.1f".format(snapshot.exactSocPercent),
+                                style = HeroSocTextStyle,
+                                color = PureWhite,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.testTag("hero_soc_value")
+                            )
+                            Text(
+                                text = "%",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = PureWhite,
+                                modifier = Modifier.padding(bottom = 6.dp, start = 2.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "%.1f".format(snapshot.exactSocPercent),
-                            style = HeroSocTextStyle,
-                            color = PureWhite,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.testTag("hero_soc_value")
-                        )
-                        Text(
-                            text = "%",
-                            style = MaterialTheme.typography.titleLarge,
+                            text = snapshot.deviceName,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = SlateMuted,
-                            modifier = Modifier.padding(bottom = 7.dp, start = 2.dp)
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = specSummary,
+                            style = MonoLabelSmall,
+                            color = SlateMuted,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.testTag("hero_pack_specs")
                         )
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = snapshot.deviceName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = SlateMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = specSummary,
-                        style = MonoLabelSmall,
-                        color = SubtleText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.testTag("hero_pack_specs")
-                    )
                 }
             }
 
@@ -330,13 +436,7 @@ fun HeroPowerCard(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = if (isStandby) {
-                                "0 W"
-                            } else if (isCharging) {
-                                "+${absWatts.toInt()} W"
-                            } else {
-                                "${absWatts.toInt()} W"
-                            },
+                            text = wattageDisplay,
                             style = MonoMetricMedium,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
@@ -394,16 +494,12 @@ private fun PassThroughFlowLine(
     dischargeMosEnabled: Boolean,
     showMosPills: Boolean
 ) {
-    val inActive = flow.grossInWatts > 1.5f
-    val outActive = flow.loadOutWatts > 0.5f
-    val netText = when {
-        flow.netPackWatts > 1.5f -> "+${flow.netPackWatts.toInt()} W"
-        flow.netPackWatts < -1.5f -> "-${abs(flow.netPackWatts).toInt()} W"
-        else -> "0 W"
-    }
+    val inActive = flow.grossInWatts > 0.2f
+    val outActive = flow.loadOutWatts > 0.2f
+    val netText = PowerMath.formatWatts(flow.netPackWatts, signed = true)
     val netColor = when {
-        flow.netPackWatts > 1.5f -> ElectricEmerald
-        flow.netPackWatts < -1.5f -> PrecisionCyan
+        flow.netPackWatts > 0.2f -> ElectricEmerald
+        flow.netPackWatts < -0.2f -> PrecisionCyan
         else -> SlateMuted
     }
 
@@ -433,7 +529,7 @@ private fun PassThroughFlowLine(
                         color = SlateMuted
                     )
                     Text(
-                        text = if (inActive) "+${flow.grossInWatts.toInt()} W" else "0 W",
+                        text = if (inActive) "+${PowerMath.formatWatts(flow.grossInWatts)}" else "0.0 W",
                         style = MonoMetricMedium,
                         color = if (inActive) ElectricEmerald else SlateMuted,
                         modifier = Modifier.testTag("passthrough_gross_in")
@@ -461,7 +557,7 @@ private fun PassThroughFlowLine(
                         color = SlateMuted
                     )
                     Text(
-                        text = "${flow.loadOutWatts.toInt()} W",
+                        text = PowerMath.formatWatts(flow.loadOutWatts),
                         style = MonoMetricMedium,
                         color = if (outActive) PrecisionCyan else SlateMuted,
                         modifier = Modifier.testTag("passthrough_load_out")

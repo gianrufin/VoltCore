@@ -16,12 +16,13 @@
     <string name="status_offline_cached">OFFLINE CACHED</string>
     <string name="status_awaiting_connection">AWAITING PACK</string>
     <string name="landing_connect_title">Connect a Power Station</string>
-    <string name="landing_connect_subtitle">Tap + to scan via Bluetooth and monitor live state of charge, input, and plugged loads.</string>
+    <string name="landing_connect_subtitle">Tap + to scan via Bluetooth and monitor live state of charge, input, output, and shunt power flow.</string>
     <string name="section_saved_stations">SAVED POWER STATIONS</string>
     <string name="action_open_dashboard">Open Dashboard</string>
     <string name="action_connect_station">Connect</string>
     <string name="action_back_to_stations">Stations</string>
     <string name="action_add_power_station">Add Power Station</string>
+    <string name="new_version_available">New version available</string>
 
     <!-- Monitor Screen -->
     <string name="label_soc_unit">%</string>
@@ -42,7 +43,9 @@
     <string name="metric_temperature">TEMPERATURE</string>
     <string name="metric_cycles">CYCLE COUNT</string>
 
-    <!-- Plugged Devices -->
+    <!-- Automated Power Flow & Legacy Strings -->
+    <string name="section_power_flow">Power flow</string>
+    <string name="power_flow_auto_badge">Auto · Single Shunt</string>
     <string name="section_plugged_devices">PLUGGED DEVICES</string>
     <string name="action_add_device">Add Load</string>
     <string name="empty_plugged_devices">No plugged devices tracked yet. Add USB-C, AC, or 12V DC loads to monitor draw.</string>

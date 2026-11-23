@@ -18,7 +18,7 @@
   <meta property="og:image:type" content="image/jpeg" />
   <meta property="og:image:width" content="1280" />
   <meta property="og:image:height" content="720" />
-  <meta property="og:image:alt" content="VoltCore AMOLED battery monitor interface showing 99.2% SoC, 46 W output, and diagnostic telemetry" />
+  <meta property="og:image:alt" content="VoltCore AMOLED battery monitor interface showing 99.2% SoC, 46.2 W output, and diagnostic telemetry" />
 
   <!-- Twitter / X Large Summary Card -->
   <meta name="twitter:card" content="summary_large_image" />
@@ -35,10 +35,10 @@
 </head>
 <body>
   <!-- New Version Available Banner -->
-  <div class="update-banner" id="update-banner" hidden>
+  <div class="update-banner" id="update-banner">
     <div class="container banner-inner">
       <span class="status-dot mint" aria-hidden="true"></span>
-      <span>A new version <strong id="update-banner-version">v1.2.0</strong> is available.</span>
+      <span>New version <strong id="update-banner-version">v1.2.0</strong> is available.</span>
       <a href="https://github.com/gianrufin/VoltCore/releases/latest" target="_blank" rel="noopener noreferrer" class="banner-link">View Release ↗</a>
     </div>
   </div>
@@ -49,7 +49,7 @@
       <a href="#" class="brand" aria-label="VoltCore Home">
         <span class="brand-dot" aria-hidden="true"></span>
         <span class="brand-name">VoltCore</span>
-        <span class="version-tag mono" id="nav-version-pill">v1.1.0</span>
+        <span class="version-tag mono" id="nav-version-pill">v1.2.0</span>
       </a>
 
       <nav class="nav-links" aria-label="Primary">
@@ -113,7 +113,7 @@
           <div class="stat-divider" aria-hidden="true"></div>
           <div class="telemetry-stat">
             <span class="stat-label">App version</span>
-            <span class="stat-value mono text-mint" id="hero-latest-tag">v1.1.0</span>
+            <span class="stat-value mono text-mint" id="hero-latest-tag">v1.2.0</span>
           </div>
           <div class="stat-divider" aria-hidden="true"></div>
           <button type="button" class="telemetry-stat stat-button" id="hero-stats-trigger">
@@ -136,12 +136,14 @@
 
           <div class="gauge-wrap">
             <canvas id="hero-battery-canvas" width="220" height="220" aria-label="Interactive battery state of charge gauge"></canvas>
-            <div class="gauge-overlay">
-              <div class="soc-readout">
-                <span class="soc-digits mono" id="demo-soc-value">99.2</span><span class="soc-pct" id="demo-soc-pct">%</span>
+            <div class="gauge-center-disc">
+              <div class="gauge-overlay">
+                <div class="soc-readout">
+                  <span class="soc-digits mono" id="demo-soc-value">99.2</span><span class="soc-pct" id="demo-soc-pct">%</span>
+                </div>
+                <div class="pack-name" id="demo-pack-name">Camper 280Ah Pack</div>
+                <div class="pack-spec mono" id="demo-pack-spec">4S · 280 Ah · 12.8 V</div>
               </div>
-              <div class="pack-name" id="demo-pack-name">Camper 280Ah Pack</div>
-              <div class="pack-spec mono" id="demo-pack-spec">4S · 280 Ah · 12.8 V</div>
             </div>
           </div>
 
@@ -149,7 +151,7 @@
           <div class="summary-bar">
             <div class="summary-col">
               <span class="summary-label" id="demo-power-label">Output</span>
-              <strong class="summary-val mono text-blue" id="demo-power-value">46 W</strong>
+              <strong class="summary-val mono text-blue" id="demo-power-value">46.2 W</strong>
             </div>
             <div class="summary-divider" aria-hidden="true"></div>
             <div class="summary-col align-right">
@@ -162,15 +164,15 @@
           <div class="passthrough-bar" id="demo-passthrough" hidden>
             <div class="pt-col">
               <span class="summary-label">In</span>
-              <strong class="mono text-mint" id="demo-gross-in">+400 W</strong>
+              <strong class="mono text-mint" id="demo-gross-in">+400.0 W</strong>
             </div>
             <div class="pt-col align-center">
               <span class="summary-label">Pack net</span>
-              <strong class="mono text-mint" id="demo-pack-net">+340 W</strong>
+              <strong class="mono text-mint" id="demo-pack-net">+340.0 W</strong>
             </div>
             <div class="pt-col align-right">
               <span class="summary-label">Load</span>
-              <strong class="mono text-blue" id="demo-load-out">60 W</strong>
+              <strong class="mono text-blue" id="demo-load-out">60.0 W</strong>
             </div>
           </div>
 
@@ -230,7 +232,7 @@
     <!-- App Screens Preview (Monitor, Diagnostics, Settings) -->
     <section class="container screens-section" id="screens">
       <div class="section-head">
-        <h2>Inside VoltCore <span class="mono text-blue" id="screens-version-label">v1.1.0</span></h2>
+        <h2>Inside VoltCore <span class="mono text-blue" id="screens-version-label">v1.2.0</span></h2>
         <div class="screen-tabs" role="tablist" aria-label="App screen samples">
           <button type="button" class="screen-tab active" data-screen="monitor" role="tab" aria-selected="true">Monitor</button>
           <button type="button" class="screen-tab" data-screen="diagnostics" role="tab" aria-selected="false">Diagnostics</button>
@@ -256,20 +258,20 @@
 
               <div class="mock-arc-gauge" aria-hidden="true">
                 <svg viewBox="0 0 140 140" class="mock-arc-svg">
-                  <path d="M 30 110 A 56 56 0 1 1 110 110" fill="none" stroke="#151820" stroke-width="9" stroke-linecap="round" />
-                  <path d="M 30 110 A 56 56 0 1 1 109.5 109.4" fill="none" stroke="#3A9BFF" stroke-width="9" stroke-linecap="round" />
+                  <circle cx="70" cy="70" r="56" fill="#000000" stroke="#151820" stroke-width="9" />
+                  <circle cx="70" cy="70" r="56" fill="rgba(46,230,154,0.28)" stroke="#2EE69A" stroke-width="9" />
                 </svg>
-                <div class="mock-arc-center">
+                <div class="mock-arc-disc">
                   <div class="mock-soc mono">99.2<span>%</span></div>
-                  <div class="muted-xs">Camper 280Ah Pack</div>
-                  <div class="mono subtle-xs">4S · 280 Ah · 12.8 V</div>
+                  <div class="muted-xs">Camper 280Ah</div>
+                  <div class="mono subtle-xs">4S · 280 Ah</div>
                 </div>
               </div>
 
               <div class="mock-summary-box">
                 <div>
                   <span class="muted-xs">Output</span>
-                  <strong class="mono text-blue">46 W</strong>
+                  <strong class="mono text-blue">46.2 W</strong>
                 </div>
                 <div class="v-rule" aria-hidden="true"></div>
                 <div class="align-right">
@@ -298,12 +300,20 @@
               </div>
             </div>
 
-            <div class="mock-loads-row">
-              <div>
-                <div class="loads-title">Plugged devices</div>
-                <div class="muted-xs">No active loads added</div>
+            <div class="mock-tip-box">
+              <span class="mono text-mint muted-xs">Smart tip</span>
+              <span class="muted-xs">Pack nominal · Charge &amp; cell balance normal.</span>
+            </div>
+
+            <div class="mock-power-flow">
+              <div class="mock-card-row">
+                <span class="loads-title">Power flow</span>
+                <span class="mono muted-xs text-blue">Auto · 46.2 W out</span>
               </div>
-              <span class="app-action-btn">+ Add load</span>
+              <div class="mock-card-row mono muted-xs">
+                <span class="text-mint">Charge MOS: On</span>
+                <span class="text-mint">Discharge MOS: On</span>
+              </div>
             </div>
 
             <div class="mock-bottom-nav" aria-hidden="true">
@@ -312,7 +322,7 @@
               <span class="nav-item">Settings</span>
             </div>
           </div>
-          <p class="screen-caption"><strong>Monitor</strong> — Primary 99.2% SoC gauge, output summary, 2×2 telemetry grid, and plugged load tracking.</p>
+          <p class="screen-caption"><strong>Monitor</strong> — High-contrast 99.2% liquid SoC gauge, exact 46.2 W shunt telemetry, smart tip, and automated Power flow.</p>
         </article>
 
         <!-- Screen 2: Diagnostics -->
@@ -404,7 +414,7 @@
           <div class="phone-screen">
             <div class="app-bar">
               <strong class="screen-title-sm">Settings</strong>
-              <span class="mono text-blue muted-sm" id="settings-mock-version">v1.1.0</span>
+              <span class="mono text-blue muted-sm" id="settings-mock-version">v1.2.0</span>
             </div>
 
             <div class="mock-card compact">
@@ -444,7 +454,7 @@
             <div class="mock-card compact">
               <div class="mock-card-row">
                 <span class="loads-title">App updates</span>
-                <span class="mono text-blue muted-xs" id="settings-card-version">v1.1.0</span>
+                <span class="mono text-blue muted-xs" id="settings-card-version">v1.2.0</span>
               </div>
               <div class="mock-repo-box mono muted-xs">gianrufin/VoltCore</div>
               <div class="mock-btn-flat">Check for updates</div>
@@ -485,8 +495,8 @@
         </div>
         <div class="capability-card">
           <div class="cap-tag mono text-blue">APK</div>
-          <h3>Verified in-app updates</h3>
-          <p>Checks GitHub Releases from Settings, downloads the APK, verifies package signing, and launches Android’s installer via FileProvider.</p>
+          <h3>Session in-app updates</h3>
+          <p>Checks GitHub Releases on launch and in Settings, verifies package signing, and installs cleanly via Android PackageInstaller.</p>
         </div>
       </div>
     </section>

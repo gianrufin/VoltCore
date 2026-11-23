@@ -9,7 +9,7 @@
 
 ## Download Latest APK & Landing Page
 
-> **Current Packaged Version:** `v1.1.0` (`versionCode: 2`)
+> **Current Packaged Version:** `v1.2.0` (`versionCode: 10200`)
 > **GitHub Pages Showcase:** [`gianrufin.github.io/VoltCore`](https://gianrufin.github.io/VoltCore/)
 
 <p align="left">
@@ -31,17 +31,17 @@
 ## Publishing Releases on GitHub
 
 1. Push updates from AI Studio to `gianrufin/VoltCore`.
-2. Open **Actions → Release APK → Run workflow** (or push a version tag such as `v1.1.0`).
-3. GitHub Actions automatically computes a monotonic `versionCode`, builds the APK, runs unit & Robolectric tests, and publishes a Release containing `VoltCore-<version>.apk` and `VoltCore-latest.apk`.
-4. Inside **VoltCore → Settings → GitHub APK Updater**, `gianrufin/VoltCore` downloads, verifies signing parity, and launches Android's `FileProvider` package installer directly.
+2. Open **Actions → Release APK → Run workflow** (or push a version tag such as `v1.2.0`).
+3. GitHub Actions automatically computes a monotonic `versionCode`, builds the APK, runs unit tests, and publishes a Release containing `VoltCore-<version>.apk` and `VoltCore-latest.apk`.
+4. Inside **VoltCore → Settings → App updates**, `gianrufin/VoltCore` downloads, verifies signing parity, and installs cleanly via Android `PackageInstaller`.
 
 ---
 
 ## Core Features
 
-- **EcoFlow-Style Hero Power Card**: Oversized bold SoC % ring with dynamic charging (emerald) and discharging (cyan) states, live input/output wattage, remaining Wh, and calculated **hours remaining to empty** or **hours remaining to 100% full**.
+- **Gyro-Reactive Hero Power Card**: High-contrast center disc with bold SoC %, smooth 60fps liquid wave color-graded green → amber → red, exact 0.1 W shunt wattage (`V × A`), remaining Wh, and calculated **hours remaining to empty** or **hours remaining to 100% full**.
 - **Critical Battery Diagnostics**: Tabular monospace 2×2 telemetry grid for **Voltage (V)**, **Current (A)**, **Temperature (°C)**, and **Cycle Count** with State of Health (SoH %) and cell delta mV.
-- **Plugged Devices Monitor**: Track connected loads across `USB-C PD`, `AC Inverter`, `12V DC`, and `Anderson` ports with live allocation tracking.
+- **Automated Power Flow**: Real-time input, output, net shunt math (`V × A`), and `Charge MOS` / `Discharge MOS` rail states with smart contextual tips.
 - **Multi-Protocol Smart BMS BLE**: Serialized Bluetooth Low Energy GATT client supporting **JBD/Xiaoxiang**, **JK BMS**, **Daly BMS**, **Nordic UART**, and **Standard BLE Battery Service (0x180F)** with live GATT service discovery diagnostics.
 - **Offline Room Cache & Trend Diagnostics**: Automatically caches telemetry in Room SQLite; switches seamlessly to **Offline Cached** mode when disconnected with Voltage, Current, and Temperature sparklines, 16S cell balance bars, and an alert log.
 - **Local Push Notifications**: Configurable alerts for **Charge Completion %**, **Low Battery %**, and **High Temperature °C** via Android `NotificationChannel`.

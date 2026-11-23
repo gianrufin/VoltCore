@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.BluetoothConnected
 import androidx.compose.material.icons.rounded.BluetoothDisabled
 import androidx.compose.material.icons.rounded.BluetoothSearching
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -55,15 +56,15 @@ import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.ble.BleConnectionStatus
 import com.example.data.ble.BleUiState
-import com.example.data.local.OutputPortType
-import com.example.data.local.PluggedDeviceEntity
+import com.example.data.ble.PowerMath
 import com.example.data.local.SavedStationEntity
 import com.example.data.local.TelemetrySnapshotEntity
+import com.example.data.repository.UpdateCheckResult
 import com.example.ui.ConnectionMode
 import com.example.ui.MonitorUiState
 import com.example.ui.components.HeroPowerCard
 import com.example.ui.components.MicroSuggestionsCard
-import com.example.ui.components.PluggedDevicesSection
+import com.example.ui.components.PowerFlowSection
 import com.example.ui.components.TelemetryGrid
 import com.example.ui.theme.CarbonElevated
 import com.example.ui.theme.CarbonSurface
@@ -90,9 +91,7 @@ fun MonitorScreen(
     onCloseDashboard: () -> Unit,
     onConnectSavedStation: (SavedStationEntity) -> Unit,
     onRemoveSavedStation: (String) -> Unit,
-    onSavePluggedDevice: (Long, String, OutputPortType, Float) -> Unit,
-    onTogglePluggedDevice: (PluggedDeviceEntity) -> Unit,
-    onDeletePluggedDevice: (Long) -> Unit,
+    onOpenUpdates: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val liveSnapshot = if (uiState.bleState.status == BleConnectionStatus.CONNECTED) {
@@ -101,6 +100,7 @@ fun MonitorScreen(
         null
     }
     val showDashboard = uiState.isDashboardOpen && liveSnapshot != null
+    val availableUpdate = uiState.updateCheckResult as? UpdateCheckResult.UpdateAvailable
 
     BackHandler(enabled = showDashboard) {
         onCloseDashboard()
@@ -132,6 +132,13 @@ fun MonitorScreen(
                     onCloseDashboard = onCloseDashboard,
                     onOpenConnectionSheet = onOpenConnectionSheet
                 )
+                if (availableUpdate != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    NewVersionAvailableBanner(
+                        versionTag = availableUpdate.latestVersion,
+                        onClick = onOpenUpdates
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -159,6 +166,15 @@ fun MonitorScreen(
                         onCloseDashboard = onCloseDashboard,
                         onOpenConnectionSheet = onOpenConnectionSheet
                     )
+                }
+
+                if (availableUpdate != null) {
+                    item {
+                        NewVersionAvailableBanner(
+                            versionTag = availableUpdate.latestVersion,
+                            onClick = onOpenUpdates
+                        )
+                    }
                 }
 
                 if (!showDashboard) {
@@ -250,19 +266,10 @@ fun MonitorScreen(
                                     temperatureUnit = uiState.settings.temperatureUnit
                                 )
                                 MicroSuggestionsCard(snapshot = liveSnapshot)
-                                PluggedDevicesSection(
-                                    devices = uiState.pluggedDevices,
-                                    activePluggedWatts = uiState.activePluggedWatts,
-                                    packOutputWatts = if (!liveSnapshot.isCharging) {
-                                        abs(liveSnapshot.powerWatts)
-                                    } else {
-                                        0f
-                                    },
-                                    remainingWh = uiState.remainingWh,
-                                    displayDensity = uiState.settings.displayDensity,
-                                    onSaveDevice = onSavePluggedDevice,
-                                    onToggleDevice = onTogglePluggedDevice,
-                                    onDeleteDevice = onDeletePluggedDevice
+                                PowerFlowSection(
+                                    snapshot = liveSnapshot,
+                                    protocolName = uiState.bleState.detectedProtocol ?: "Smart BMS",
+                                    displayDensity = uiState.settings.displayDensity
                                 )
                             }
                         }
@@ -299,19 +306,10 @@ fun MonitorScreen(
                     }
 
                     item {
-                        PluggedDevicesSection(
-                            devices = uiState.pluggedDevices,
-                            activePluggedWatts = uiState.activePluggedWatts,
-                            packOutputWatts = if (!liveSnapshot.isCharging) {
-                                abs(liveSnapshot.powerWatts)
-                            } else {
-                                0f
-                            },
-                            remainingWh = uiState.remainingWh,
-                            displayDensity = uiState.settings.displayDensity,
-                            onSaveDevice = onSavePluggedDevice,
-                            onToggleDevice = onTogglePluggedDevice,
-                            onDeleteDevice = onDeletePluggedDevice
+                        PowerFlowSection(
+                            snapshot = liveSnapshot,
+                            protocolName = uiState.bleState.detectedProtocol ?: "Smart BMS",
+                            displayDensity = uiState.settings.displayDensity
                         )
                     }
                 }
@@ -644,11 +642,12 @@ private fun SavedStationCard(
             }
 
             if (isConnected && liveSnapshot != null) {
-                val absWatts = abs(liveSnapshot.powerWatts)
+                val exactWatts = liveSnapshot.voltageVolts * liveSnapshot.currentAmps
+                val absWatts = abs(exactWatts)
                 val wattText = when {
-                    absWatts < 1.5f -> "0 W"
-                    liveSnapshot.isCharging -> "+${absWatts.toInt()} W"
-                    else -> "${absWatts.toInt()} W"
+                    absWatts < 0.2f -> "0.0 W"
+                    liveSnapshot.isCharging -> "+${PowerMath.formatWatts(absWatts)}"
+                    else -> PowerMath.formatWatts(absWatts)
                 }
 
                 Surface(
@@ -926,6 +925,62 @@ private fun LiveGattHandshakeCard(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun NewVersionAvailableBanner(
+    versionTag: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .testTag("monitor_new_version_banner"),
+        shape = MaterialTheme.shapes.medium,
+        color = EmeraldDim,
+        border = BorderStroke(1.dp, ElectricEmerald.copy(alpha = 0.55f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SystemUpdate,
+                    contentDescription = null,
+                    tint = ElectricEmerald,
+                    modifier = Modifier.size(18.dp)
+                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.new_version_available),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = PureWhite
+                    )
+                    Text(
+                        text = "$versionTag ready to install in Settings",
+                        style = MonoLabelSmall,
+                        color = ElectricEmerald
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = "Open updates",
+                tint = ElectricEmerald,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

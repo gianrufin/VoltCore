@@ -16,12 +16,19 @@ android {
     applicationId = "com.aistudio.voltcore.bmsxkp"
     minSdk = 24
     targetSdk = 36
-    val propVersionCode = (project.findProperty("VOLTCORE_VERSION_CODE") as? String)?.toIntOrNull()
-      ?: System.getenv("VOLTCORE_VERSION_CODE")?.toIntOrNull()
-      ?: 2
     val propVersionName = (project.findProperty("VOLTCORE_VERSION_NAME") as? String)?.takeIf { it.isNotBlank() }
       ?: System.getenv("VOLTCORE_VERSION_NAME")?.takeIf { it.isNotBlank() }
-      ?: "1.1.0"
+      ?: "1.2.0"
+    val semverParts = propVersionName.trimStart('v', 'V').substringBefore('-').split(".")
+    val computedVersionCode = if (semverParts.size >= 2) {
+      val maj = semverParts.getOrNull(0)?.toIntOrNull() ?: 1
+      val min = semverParts.getOrNull(1)?.toIntOrNull() ?: 0
+      val pat = semverParts.getOrNull(2)?.toIntOrNull() ?: 0
+      maj * 10000 + min * 100 + pat
+    } else 10200
+    val propVersionCode = (project.findProperty("VOLTCORE_VERSION_CODE") as? String)?.toIntOrNull()
+      ?: System.getenv("VOLTCORE_VERSION_CODE")?.toIntOrNull()
+      ?: computedVersionCode
     versionCode = propVersionCode
     versionName = propVersionName
 
